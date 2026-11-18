@@ -315,7 +315,9 @@ def test_forecast_matches_what_the_engine_really_does():
 def test_forecast_no_payday_is_worst_case_and_snapshot_has_it():
     s = game(); _only_infantry(s); s.round = 3; s.factions[Side.PLAYER].res[Res.FOOD] = 5
     f = s.forecast(Side.PLAYER)["food"]
-    assert f["runs_out_no_payday"] == 2 and (f["runs_out_in"] is None or f["runs_out_in"] > 2)
+    import math
+    net = f["upkeep"] - f["round_income"]                      # food lost per round once the trickle is counted
+    assert f["runs_out_no_payday"] == math.ceil(5 / net - 1e-9) and (f["runs_out_in"] is None or f["runs_out_in"] > f["runs_out_no_payday"])
     assert "food" in s.snapshot(Side.PLAYER)["forecast"]
 
 
@@ -349,3 +351,15 @@ def test_preview_move_endpoint():
     ux, uy = next(u["pos"] for u in j["snapshot"]["units"] if u["id"] == uid)
     r = c.post("/api/preview_move", json={"state": j["state"], "sig": j["sig"], "unit": uid, "x": ux + 2, "y": uy}).json()
     assert r["ok"] and r["steps"] and "terrainCost" in j["snapshot"]
+
+
+def test_round_trickle_ignores_supply_bases():
+    a, b = game(5), game(5)
+    for i in range(3):
+        b.add_building(Building(BuildingType.SUPPLY_BASE, Side.PLAYER, (6 + i, 8)))
+    for s in (a, b):
+        before = s.factions[Side.PLAYER].res[Res.MATERIALS]
+        s.end_turn(); s.end_turn()                      # one full round (round 2: not a payday)
+        assert s.round == 2
+        assert abs(s.factions[Side.PLAYER].res[Res.MATERIALS] - before - ROUND_INCOME[Res.MATERIALS] * s.income_mult(Side.PLAYER)) < 1e-6
+    assert a.factions[Side.PLAYER].res == b.factions[Side.PLAYER].res

@@ -345,3 +345,27 @@ Goal: make it obvious what to do next. A **command strip** above the map shows a
 **v6.1:** building, mine-check and unloading now show valid tiles. After choosing what to build, valid tiles light up green and every other tile is dimmed, a faint preview follows the cursor, a Cancel button and Esc back out, and clicking a bad tile explains what to do. Tested in a simulated browser.
 
 **v6.2: supply forecast.** The server computes, per resource with upkeep (food, fuel, money), the stock, upkeep per round, rounds until it hits 0 (with and without the next paydays) and the payday amount. It mirrors `begin_round` exactly and is tested against the real engine in 5 scenarios. Terrain burn is not included because it depends on where you move.
+
+
+---
+
+## 14. v7: supplies and bribe odds
+| Change | Old | New |
+|---|---|---|
+| Starting stock (money/food/bullets/bombs/materials/fuel) | 150/60/60/15/50/40 | 200/110/80/18/70/60 |
+| Payday base (same order) | 40/16/20/5/20/12 | 55/32/26/6/28/18 |
+| Bribe base weights (defect/surrender/resisted/backfire) | 4/16/70/10 | 8/24/60/8 |
+| Buyer morale effect | success x0.5 only below 40 | success x(0.5 + morale/100), backfire x(1.5 - morale/100, min 0.4) |
+
+Why: the starting army ate 32.5 food per 5 rounds but payday gave 16, so every game began in a food deficit. Payday food now covers a standing army, so supply bases and routes are an advantage rather than survival.
+Bribe success at offer 1x: 18% at morale 0, 32% at 50, 43% at 100 (backfire 14% / 8% / 4%).
+
+Simulation (40 games per difficulty, balanced AI vs balanced AI, player moves first): player wins 72% easy / 68% medium / 75% hard, draws about 0%, average game about 33 rounds. Games now end decisively, but the difficulty multiplier matters less because supplies are no longer scarce. Medium is above 50% because the side that moves first has an edge. Next lever if Hard feels too soft: scale the AI's payday by difficulty as well.
+
+**v7.1 correction:** bribe odds now use the *morale edge* (your morale minus the target side's), not your morale alone. Success x clamp(1 + edge/100, 0.4, 1.8), backfire x clamp(1 - edge/100, 0.4, 1.6). Equal morale is neutral at any level; the engage screen shows both morale values. This replaces the v7 buyer-morale rule and the old "enemy morale below 50" rule. The AI uses the same formula.
+
+**v7.2 supply bases:** each connected base now adds +30% of the base shipment (was +20%), and the morale cap is (30: x1.0, 50: x2.2, 100: x3.5) instead of (30: x1.0, 60: x1.6, 100: x2.5). At morale 50 the cap used to allow only 2 bases to count, so extra bases did nothing and one base supplied barely more than one infantry. Now 4 bases count at morale 50, 6 at 75, 8 at 100, and one base adds about 1.9 food per round. The HUD shows how many bases count at your morale and warns when you own more than that.
+
+**v7.3 Fibonacci supply:** the payday multiplier is now `1, 2, 3, 5, 8, 13, 21...` for 0, 1, 2, 3... connected supply bases (Fibonacci with the duplicate 1 skipped so the first base still helps), replacing +30% per base. Morale caps it: x1 at morale 30 (bases pay nothing), x3 at 50, x5 at 75, x8 at 100, blended in between. 0 bases still gives the plain base shipment. The HUD shows how many bases fully pay at your morale.
+
+**v7.4 per-round trickle:** every round each side also receives `ROUND_INCOME` (money 4, food 3, bullets 2, bombs 0.5, materials 2, fuel 1.5), scaled by the morale income multiplier but NOT by supply bases, before upkeep is paid. Payday (every 5 rounds) stays the big shipment and is the only one multiplied by the Fibonacci supply multiplier. The forecast includes the trickle.

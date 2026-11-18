@@ -268,8 +268,8 @@ class Tier(str, Enum):
     BACKFIRE = "SSR_BACKFIRE"        # double agent
 
 
-BASE_WEIGHTS = {Tier.DEFECTION: 4.0, Tier.SURRENDER: 16.0,
-                Tier.RESISTED: 70.0, Tier.BACKFIRE: 10.0}
+BASE_WEIGHTS = {Tier.DEFECTION: 8.0, Tier.SURRENDER: 24.0,
+                Tier.RESISTED: 60.0, Tier.BACKFIRE: 8.0}
 BRIBE_BASE_COST = 20      # per rank, times offer multiplier
 DOUBLE_AGENT_ROUNDS = 3
 
@@ -282,8 +282,9 @@ def gacha_odds(state: GameState, buyer: Side, target: Unit, offer_mult: float) -
     """Probability matrix. offer_mult in [1, 3].
         Success tiers x (1 + 0.5*(offer-1)) ; backfire x max(.3, 1-.25*(offer-1))
         target frozen/bankrupt : surrender x2.5, resisted x0.5
-        buyer moral < 40       : success x0.5 (nobody sells out to a loser's purse)
-        target side moral low  : success x(1 + (50-moral)/100)
+        morale edge            : edge = buyer moral - target side's moral (-100..+100)
+                                 success x clamp(1 + edge/100, 0.4, 1.8); backfire x clamp(1 - edge/100, 0.4, 1.6)
+                                 equal morale is neutral (x1) whatever the absolute level
         each rank above 1      : success x0.9
     """
     w = dict(BASE_WEIGHTS)
@@ -294,11 +295,9 @@ def gacha_odds(state: GameState, buyer: Side, target: Unit, offer_mult: float) -
     if target.frozen:
         w[Tier.SURRENDER] *= 2.5
         w[Tier.RESISTED] *= 0.5
-    if state.factions[buyer].moral < 40:
-        w[Tier.DEFECTION] *= 0.5
-        w[Tier.SURRENDER] *= 0.5
-    enemy_moral = state.factions[target.owner].moral
-    desp = max(0.0, 1 + (50 - enemy_moral) / 100)
+    edge = state.factions[buyer].moral - state.factions[target.owner].moral    # who has the higher morale?
+    desp = max(0.4, min(1.8, 1 + edge / 100))
+    w[Tier.BACKFIRE] *= max(0.4, min(1.6, 1 - edge / 100))
     rank_pen = 0.9 ** (target.rank - 1)
     for t in (Tier.DEFECTION, Tier.SURRENDER):
         w[t] *= desp * rank_pen
@@ -461,4 +460,5 @@ def preview_engagement(state: GameState, attacker_id: int, defender_id: int) -> 
             "ratio": [round(lo, 2), round(hi, 2)],
             "verdict": "favourable" if lo > 1.3 else "dangerous" if hi < 0.8 else "uncertain",
             "intel": "good (scout nearby)" if scout else "poor", "bullet_cost": a.spec.bullet_cost,
-            "can_capture": d.type is UnitType.INFANTRY or d.frozen, "bribe": bribe}
+            "can_capture": d.type is UnitType.INFANTRY or d.frozen, "bribe": bribe,
+            "morale": {"you": round(state.factions[a.owner].moral), "enemy": round(state.factions[d.owner].moral)}}

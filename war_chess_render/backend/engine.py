@@ -163,8 +163,8 @@ BUILD_COST: dict[BuildingType, dict[Res, float]] = {
 BUILD_TURNS = {BuildingType.WALL: 1, BuildingType.SUPPLY_BASE: 3, BuildingType.BARRACKS: 2}
 
 BASE_START: dict[Res, float] = {
-    Res.MONEY: 150, Res.FOOD: 60, Res.BULLETS: 60,
-    Res.BOMBS: 15, Res.MATERIALS: 50, Res.FUEL: 40,
+    Res.MONEY: 200, Res.FOOD: 110, Res.BULLETS: 80,
+    Res.BOMBS: 18, Res.MATERIALS: 70, Res.FUEL: 60,
 }
 # (player multiplier, ai multiplier)
 DIFFICULTY_START = {
@@ -177,10 +177,16 @@ INTERROGATION_COST = {Difficulty.EASY: 10, Difficulty.MEDIUM: 20, Difficulty.HAR
 
 PAYDAY_INTERVAL = 5
 PAYDAY_BASE: dict[Res, float] = {
-    Res.MONEY: 40, Res.FOOD: 16, Res.BULLETS: 20,
-    Res.BOMBS: 5, Res.MATERIALS: 20, Res.FUEL: 12,
+    Res.MONEY: 55, Res.FOOD: 32, Res.BULLETS: 26,
+    Res.BOMBS: 6, Res.MATERIALS: 28, Res.FUEL: 18,
 }
-SUPPLY_BASE_BONUS = 0.20          # +20% shipment per supply base (before moral cap)
+# Small shipment every round (scaled by morale income, NOT by supply bases). Payday stays the big, Fibonacci-scaled one.
+ROUND_INCOME: dict[Res, float] = {Res.MONEY: 4, Res.FOOD: 3, Res.BULLETS: 2, Res.BOMBS: 0.5, Res.MATERIALS: 2, Res.FUEL: 1.5}
+SUPPLY_FIB = [1, 2, 3, 5, 8, 13, 21, 34, 55]   # payday multiplier by connected bases (Fibonacci; the repeated 1 is skipped so base #1 helps)
+
+
+def supply_multiplier(bases: int) -> float:
+    return float(SUPPLY_FIB[min(max(0, bases), len(SUPPLY_FIB) - 1)])
 ARMORY_BASE_CAP = 200             # shared cap on BULLETS + BOMBS
 ARMORY_PER_BARRACKS = 40          # each barracks LOWERS the armory cap by this
 ARMORY_MIN_CAP = 50
@@ -193,7 +199,7 @@ INCOME_MULT_TABLE = [(0, 0.30), (25, 0.60), (50, 1.00), (75, 1.15), (100, 1.30)]
 CONSUMPTION_MULT_TABLE = [(0, 1.50), (25, 1.25), (50, 1.00), (75, 0.95), (100, 0.90)]
 # Max supply-base multiplier allowed at a given moral. Below ~30 moral, bases
 # give NOTHING: this is the "Moral Multiplier Cap".
-SUPPLY_CAP_TABLE = [(0, 1.00), (30, 1.00), (60, 1.60), (100, 2.50)]
+SUPPLY_CAP_TABLE = [(0, 1.00), (30, 1.00), (50, 3.00), (75, 5.00), (100, 8.00)]
 
 MORAL_DELTAS = {
     "FORCE_INTERROGATION": -8.0,
@@ -650,6 +656,7 @@ class GameState:
                     self.emit("build_finished", pos=b.pos, btype=b.type.value)
         for side in Side:
             self.recompute_armory(side)
+            self.round_income(side)
             self.pay_upkeep(side)
         self.heal_units()
         if self.round % PAYDAY_INTERVAL == 0:
@@ -661,6 +668,15 @@ class GameState:
             hook(self)
         self.check_victory()
         self.emit("turn_changed", active=self.active.value)
+
+    def round_income(self, side: Side) -> None:
+        """Per-round trickle of every resource. Ammo respects the armory cap (silently: no overflow spam)."""
+        f, mm = self.factions[side], self.income_mult(side)
+        for r, amt in ROUND_INCOME.items():
+            gain = amt * mm
+            if r in (Res.BULLETS, Res.BOMBS):
+                gain = min(gain, self.armory_room(side))
+            f.res[r] += gain
 
     def pay_upkeep(self, side: Side) -> None:
         cm = self.consumption_mult(side)
@@ -676,7 +692,7 @@ class GameState:
         """final = base * min(1 + 0.2*bases, moral_cap) * moral_income_mult"""
         owned = self.count_buildings(side, BuildingType.SUPPLY_BASE)
         bases = len(self.connected_supply_bases(side))   # only bases linked to HQ pay out
-        raw_supply = 1.0 + SUPPLY_BASE_BONUS * bases
+        raw_supply = supply_multiplier(bases)
         cap = self.supply_cap(side)
         supply = min(raw_supply, cap)
         mm = self.income_mult(side)
@@ -714,16 +730,17 @@ class GameState:
             for r, amt in u.spec.upkeep.items():
                 per[r] = per.get(r, 0.0) + amt
         moral_cm = lerp_table(CONSUMPTION_MULT_TABLE, self.factions[side].moral)
-        supply = min(1.0 + SUPPLY_BASE_BONUS * len(self.connected_supply_bases(side)), self.supply_cap(side))
+        supply = min(supply_multiplier(len(self.connected_supply_bases(side))), self.supply_cap(side))
         ship = {r: amt * supply * self.income_mult(side) for r, amt in PAYDAY_BASE.items()}
         out = {}
         for r, amt in per.items():
+            tr = ROUND_INCOME[r] * self.income_mult(side)
             stock = nopay = self.factions[side].res[r]
             hit = hit_nopay = None
             for t in range(1, horizon + 1):
                 rnd = self.round + t
                 need = amt * moral_cm * (1 + WEARINESS_RATE * max(0, rnd - WEARINESS_START))
-                stock, nopay = max(0.0, stock - need), max(0.0, nopay - need)
+                stock, nopay = max(0.0, stock + tr - need), max(0.0, nopay + tr - need)
                 if rnd % PAYDAY_INTERVAL == 0:
                     stock += ship[r]
                 if hit is None and stock <= 1e-9:
@@ -732,7 +749,8 @@ class GameState:
                     hit_nopay = t
             out[r.value] = {"stock": round(self.factions[side].res[r], 1), "upkeep": round(amt * moral_cm, 2),
                             "runs_out_in": hit, "runs_out_no_payday": hit_nopay,
-                            "payday_amount": round(ship[r], 1)}
+                            "payday_amount": round(ship[r], 1),
+                            "round_income": round(ROUND_INCOME[r] * self.income_mult(side), 2)}
         return out
 
     def connected_supply_bases(self, side: Side) -> list[Coord]:
@@ -832,6 +850,7 @@ class GameState:
             "actionsLeft": self.actions_left(viewer), "maxActions": MAX_ACTIONS,
             "forecast": self.forecast(viewer),
             "supplyConnected": len(self.connected_supply_bases(viewer)),
+            "supplyUseful": max(n for n, v in enumerate(SUPPLY_FIB) if v <= self.supply_cap(viewer) + 1e-9),   # bases that still pay at this morale
             "supplyTotal": self.count_buildings(viewer, BuildingType.SUPPLY_BASE),
         }
 
