@@ -297,6 +297,7 @@ class GameState:
         self.events: list[dict] = []
         self.round_hooks: list[Callable[["GameState"], None]] = []
         self._next_id = 1
+        self.moves_made = {Side.PLAYER: 0, Side.AI: 0}
 
         p_mult, a_mult = DIFFICULTY_START[difficulty]
         self.factions = {
@@ -435,12 +436,22 @@ class GameState:
         u = self.units[unit_id]
         if self.winner or u.owner is not self.active:
             return {"moved": 0, "stopped": "not_your_turn"}
+            
+        # CEK BATASAN 5 KALI MOVE MAKSIMAL PER GILIRAN
+        if self.moves_made.get(u.owner, 0) >= 5:
+            return {"moved": 0, "stopped": "max_moves_reached"}
+            
         if u.frozen:
             return {"moved": 0, "stopped": "frozen"}
         if u.carrier is not None:
             return {"moved": 0, "stopped": "embarked"}
+            
         mp_left, moved, stopped = u.spec.mp, 0, None
         for c in path:
+            # Pastikan juga total akumulasi move tidak melebihi batas 5 di tengah path
+            if self.moves_made.get(u.owner, 0) >= 5:
+                stopped = "max_moves_reached"; break
+                
             if max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) != 1:
                 stopped = "not_adjacent"; break
             if not self.can_enter(u, c):
@@ -450,13 +461,19 @@ class GameState:
                 stopped = "out_of_mp"; break
             if not self.spend(u.owner, burn):
                 stopped = "cannot_afford"; break
+                
             mp_left -= mp
             self.emit("unit_moved", unit=u.id, src=u.pos, dst=c, burn=_ser(burn))
             u.pos = c
+            
+            # Tambah counter pergerakan player/AI
+            self.moves_made[u.owner] = self.moves_made.get(u.owner, 0) + 1
+            
             for k in self.units.values():          # cargo travels with its transport
                 if k.carrier == u.id:
                     k.pos = c
             moved += 1
+            
         self.evaluate_bankruptcy(u.owner)
         return {"moved": moved, "stopped": stopped}
 
@@ -591,6 +608,7 @@ class GameState:
     def end_turn(self) -> None:
         if self.winner:
             return
+        self.moves_made[self.active] = 0  # Reset counter giliran ini
         if self.active is Side.PLAYER:
             self.active = Side.AI
             self.emit("turn_changed", active=self.active.value)
@@ -735,6 +753,7 @@ class GameState:
             "winner": self.winner.value if self.winner else None,
             "difficulty": self.difficulty.value,
             "paydayIn": PAYDAY_INTERVAL - (self.round % PAYDAY_INTERVAL),
+            "movesLeft": max(0, 5 - self.moves_made.get(viewer, 0)), # <--- Ditambahkan di sini
             "grid": [[t.value for t in row] for row in self.grid],
             "units": [{"id": u.id, "owner": u.owner.value, "type": u.type.value,
                        "pos": u.pos, "rank": u.rank, "hp": u.hp, "frozen": u.frozen, "kills": u.kills, "carrier": u.carrier}
@@ -758,7 +777,6 @@ class GameState:
             "supplyConnected": len(self.connected_supply_bases(viewer)),
             "supplyTotal": self.count_buildings(viewer, BuildingType.SUPPLY_BASE),
         }
-
 
 def _ser(d: dict) -> dict:
     return {(k.value if isinstance(k, Enum) else k): round(v, 2) for k, v in d.items()}

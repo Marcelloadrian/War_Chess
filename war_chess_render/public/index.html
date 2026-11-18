@@ -70,6 +70,7 @@ async function api(path, body){
   if(!r.ok){ log("⚠ server error "+r.status, "crit"); throw new Error(r.status); }
   return r.json();
 }
+
 function apply(res){
   S = res.snapshot; ST = res.state; SIG = res.sig;
   if(res.result && res.result.ok && lastAction) REPLAY.actions.push(lastAction);
@@ -85,6 +86,7 @@ function apply(res){
   if(sel && !S.units.find(u=>u.id===sel)) sel = null;
   render();
 }
+
 function log(t, cls){ const d=document.createElement("div"); d.textContent=t; if(cls) d.className=cls;
   const L=document.getElementById("log"); L.prepend(d); }
 function logEvent(e){
@@ -98,6 +100,7 @@ function logEvent(e){
     unit_killed:`☠ ${e.owner} unit #${e.unit} lost (${e.cause})`, game_over:`🏁 ${e.winner} wins`, weather_changed:`🌦 Weather: ${e.weather}`, mine_defused:`🔧 Mine defused at ${e.pos}`, promoted:`⭐ Unit #${e.unit} promoted to rank ${e.rank}`, unit_loaded:`🚢 Unit #${e.unit} boarded transport #${e.carrier}`, unit_unloaded:`🏖 Unit #${e.unit} landed at ${e.pos}`};
   if(m[e.type]) log(m[e.type], ["unit_frozen","unit_killed"].includes(e.type)?"crit":"");
 }
+
 function render(){
   if(!S) return;
   const H=S.grid.length, W=S.grid[0].length; cv.width=W*T; cv.height=H*T;
@@ -129,6 +132,7 @@ function render(){
   for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(!vis.has(x+","+y)) ctx.fillRect(x*T,y*T,T,T);
   hud();
 }
+
 function hud(){
   const me=S.me, st=window.startRes||(window.startRes={...me.res});
   document.getElementById("top").innerHTML =
@@ -155,6 +159,7 @@ function hud(){
   A.innerHTML=[["plant","💣 Plant bomb"],["capture_node","🏴 Capture node"],["surround","⭕ Capture surrounded"]].map(([t,l])=>`<button onclick="act({type:'${t}',unit:${u.id}})">${l}</button>`).join("")+
     `<br>`+[["wall","Wall"],["supply_base","Supply"],["barracks","Barracks"],["bomb","Drop bomb"]].map(([m,l])=>`<button onclick="setMode('${m}')">🔨 ${l}</button>`).join("");
 }
+
 function setMode(m){ mode=m; hud(); }
 async function act(a){ if(busy||!S||S.winner) return; busy=true; lastAction={...a}; try{ apply(await api("/api/action",{...a,state:ST,sig:SIG})); } finally{ busy=false; } }
 cv.addEventListener("click", ev=>{
@@ -174,6 +179,7 @@ cv.addEventListener("click", ev=>{
   if(mine&&confirm("Detonate bomb at this tile? (kills friend AND foe)")) return act({type:"detonate",x,y});
   act({type:"move",unit:sel,x,y});
 });
+
 function enemyMenu(t){
   const u=S.units.find(u=>u.id===sel);
   const auto=t.frozen?"\n\n⚡ Target is BANKRUPT — Force attack wins instantly.":"";
@@ -198,6 +204,7 @@ async function newGame(){
 document.getElementById("newgame").onclick=newGame;
 const WI={clear:"☀",rain:"🌧",storm:"⛈"};
 const OBJ=o=>!o?"Take the enemy HQ":o.type==="survive"?`Survive to round ${o.rounds}`:`Hold ${o.count} supply bases by round ${o.rounds}`;
+
 function extras(){
   if(!S) return;
   document.getElementById("top").insertAdjacentHTML("beforeend",`<span class="res">${WI[S.weather]||""} ${S.weather}</span><span class="res" title="Supply bases connected to your HQ by land">🔗 ${S.supplyConnected}/${S.supplyTotal}</span><span class="res">Enemy: ${S.aiPersona}</span><span class="res">🎯 ${OBJ(S.objective)}</span>`);
@@ -207,12 +214,14 @@ function extras(){
     if(tr) document.getElementById("actions").insertAdjacentHTML("beforeend",`<br><button onclick="act({type:'load',unit:${u.id},target:${tr.id}})">🚢 Board transport #${tr.id}</button>`); }
   if(u&&u.type==="engineer") document.getElementById("actions").insertAdjacentHTML("beforeend",`<br><button onclick="setMode('defuse')">🔧 Defuse tile</button>`);
 }
+
 const _hud=hud; hud=function(){ _hud(); extras(); };
 document.getElementById("codexbtn").onclick=()=>document.getElementById("codex").showModal();
 document.getElementById("replaybtn").onclick=()=>{
   const b=new Blob([JSON.stringify({game:"war-chess",version:2,...REPLAY},null,1)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click();
 };
+
 window.addEventListener("error",e=>{ try{ navigator.sendBeacon("/api/log",new Blob([JSON.stringify({msg:String(e.message).slice(0,480),where:(e.filename||"")+":"+e.lineno})],{type:"application/json"})); }catch(_){} });
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 (async()=>{
@@ -220,6 +229,46 @@ if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catc
     if(sv&&sv.state){ window.startRes=sv.start||null; REPLAY=sv.replay||{initial:null,actions:[]}; apply(await api("/api/load",{state:sv.state,sig:sv.sig})); log("💾 Resumed saved game"); return; } }catch(e){ localStorage.removeItem(SAVE); log("Old or corrupt save discarded."); }
   await newGame();
 })();
+
+// Contoh fungsi untuk memperbarui tampilan HUD di layar (Frontend)
+function updateGameHUD(snapshot) {
+    // 1. Update Indikator Giliran (Your Turn vs Enemy Turn)
+    const turnIndicator = document.getElementById("turn-indicator"); // Sesuaikan ID elemen di HTML kamu
+    if (turnIndicator) {
+        if (snapshot.active === "player") {
+            turnIndicator.innerText = "🎮 YOUR TURN";
+            turnIndicator.style.color = "#2ecc71"; // Hijau
+        } else {
+            turnIndicator.innerText = "🤖 ENEMY TURN (AI)";
+            turnIndicator.style.color = "#e74c3c"; // Merah
+        }
+    }
+
+    // 2. Update Nomor Round
+    const roundElement = document.getElementById("round-counter"); // Sesuaikan ID elemen di HTML kamu
+    if (roundElement) {
+        roundElement.innerText = `Round: ${snapshot.round}`;
+    }
+
+    // 3. Update Payday Countdown
+    const paydayElement = document.getElementById("payday-counter"); // Sesuaikan ID elemen di HTML kamu
+    if (paydayElement) {
+        paydayElement.innerText = `Payday in: ${snapshot.paydayIn} turns`;
+    }
+
+    // 4. Disable tombol End Turn jika sedang giliran AI
+    const endTurnBtn = document.getElementById("end-turn-btn");
+    if (endTurnBtn) {
+        if (snapshot.active === "ai") {
+            endTurnBtn.disabled = true;
+            endTurnBtn.innerText = "AI Thinking...";
+        } else {
+            endTurnBtn.disabled = false;
+            endTurnBtn.innerText = "End Turn";
+        }
+    }
+}
+
 </script>
 <dialog id="codex"><h3>📖 Field Manual</h3>
 <h5>Terrain burns resources</h5>Plains burn Food (little), Forest burns Food (lots), Urban burns Materials (tanks cannot enter), Mud burns Fuel, Sea burns Money (only ships and transports).
