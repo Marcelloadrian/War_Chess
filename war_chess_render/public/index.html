@@ -60,20 +60,21 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
     <div id="cmd">
       <div id="hint">Loading…</div>
       <div id="pips" aria-label="Moves left"></div><div id="pipstxt"></div>
-      <button id="cancel">Cancel (Esc)</button><button id="endturn">End turn</button>
+      <button id="nextunit" title="Select the next unit that can still act (N)">Next unit (N)</button><button id="cancel">Cancel (Esc)</button><button id="endturn">End turn</button>
     </div>
     <div id="boardbox"><canvas id="cv" tabindex="0" aria-label="Game map"></canvas></div>
     <div id="info">Hover a tile for details.</div>
     <div id="legend">
       <span><b style="border-color:#2f6fe4"></b>your building</span><span><b style="border-color:#d64541"></b>enemy building</span><span><b style="border-color:#fff;background:#fff3"></b>neutral (capture it)</span>
       <span>🏛 HQ</span><span>📦 supply base</span><span>⛺ barracks</span><span>🧱 wall</span><span>▦ ruins</span><span>≈ mud</span><span>⚓ sea</span><span>🌲 forest</span>
-      <span>darkened = fog</span><span>💣 your mine</span><span>❄ frozen</span>
+      <span><b style="border-color:#2f6fe4;background:#2f6fe44d"></b>can move here</span><span><b style="border-color:#ff2d2d"></b>enemy in range</span><span>🪖 infantry</span><span>🛡️ armor</span><span>🚢 destroyer</span><span>⛴️ transport</span><span>🔧 engineer</span><span>🔭 scout</span><span>darkened = fog</span><span>💣 your mine</span><span>❄ frozen</span>
     </div>
   </main>
   <aside>
     <div class="card" id="mission"></div>
     <div class="card"><h3>Selected unit</h3><div id="sel" class="small">Click one of your blue circles on the map.</div><div id="actions"></div></div>
     <div class="card"><h3>Morale</h3><div class="bar"><i id="moralfill"></i><span class="notch" title="Below 30, supply bases give nothing"></span></div><div id="moraltxt" class="small" style="margin-top:6px"></div></div>
+    <div class="card"><h3>Cost to enter a tile</h3><div id="tc" class="small"></div></div>
     <div class="card"><h3>Supply forecast</h3><div id="fc" class="small"></div></div>
     <div class="card"><h3>Warnings</h3><div id="warns" class="small"></div></div>
     <div class="card" id="prisoncard"><h3>Prisoners</h3><div id="pris" class="small">None</div></div>
@@ -89,8 +90,8 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
 <h4>Payday</h4>Every 5 rounds you get new supplies. Only supply bases 📦 <b>connected to your HQ by land</b> add to it. Enemy units and the tiles next to them cut the road. Low morale shrinks income.
 <h4>Capturing a base</h4>Select infantry, walk onto the base, press <b>Capture node</b>. It gives +5 morale.
 <h4>Fighting</h4>Click an enemy next to your unit for the engage screen: force attack, capture, or bribe. Force odds are estimates; a scout nearby sharpens them. Bribes can backfire into a double agent. You cannot attack what the fog hides.
-<h4>Mines and engineers</h4>A planted mine 💣 kills everyone on its tile when you detonate it, including your own units. Engineers (E) defuse adjacent mines.
-<h4>Boats</h4>A transport (T) carries 2 foot units. Walk next to it, press Board, sail, then Unload onto an adjacent land tile.
+<h4>Mines and engineers</h4>A planted mine 💣 kills everyone on its tile when you detonate it, including your own units. Engineers 🔧 defuse adjacent mines.
+<h4>Boats</h4>A transport ⛴️ carries 2 foot units. Walk next to it, press Board, sail, then Unload onto an adjacent land tile.
 <h4>No undo</h4>This is war: every move is final.
 <p><button class="primary" onclick="document.getElementById('codex').close()">Got it</button></p></dialog>
 
@@ -99,7 +100,22 @@ const T=30, SAVE="warchess.save.v1", $=id=>document.getElementById(id);
 const COL={plains:"#8fa77a",forest:"#5d8a5c",urban:"#9a8b7c",mud:"#8b7a55",sea:"#5b8fb9"};
 const GLYPH={forest:"🌲",urban:"▦",mud:"≈",sea:"⚓"};
 const RES=[["money","💰","Money","Bribes, building, sea travel"],["food","🌾","Food","Every unit eats 1 per round; forests burn extra"],["bullets","🔫","Bullets","Spent on each attack"],["bombs","💣","Bombs","Bomb strikes and mines"],["materials","🧱","Materials","Building; ruins burn them"],["fuel","⛽","Fuel","Mud, vehicles, ships"]];
-const LETTER={infantry:"I",armor:"A",destroyer:"D",transport:"T",engineer:"E",scout:"S"};
+const ICON=Object.fromEntries(RES.map(r=>[r[0],r[1]])), fmt=n=>String(Math.round(n*10)/10), TN={plains:"Plains",forest:"Forest 🌲",urban:"Ruins ▦",mud:"Mud ≈",sea:"Sea ⚓"};
+const LETTER={infantry:"🪖",armor:"🛡️",destroyer:"🚢",transport:"⛴️",engineer:"🔧",scout:"🔭"};
+const CLS={infantry:"foot",engineer:"foot",scout:"foot",armor:"veh",destroyer:"nav",transport:"amph"};
+const MP={infantry:3,engineer:3,scout:5,armor:4,destroyer:4,transport:4}, RNG={infantry:1,engineer:1,scout:1,armor:2,destroyer:3,transport:1};
+const MC={plains:1,forest:2,urban:2,mud:3,sea:1};
+const OK={foot:["plains","forest","urban","mud"],veh:["plains","forest","mud"],nav:["sea"],amph:["plains","mud","sea"]};
+/* Tiles the unit can reach in one move (mirrors server rules; ignores resource cost). */
+function reach(u){
+  const W=S.grid[0].length,H=S.grid.length,ok=OK[CLS[u.type]],K=(x,y)=>x+","+y,best={[K(u.pos[0],u.pos[1])]:0},q=[[0,u.pos[0],u.pos[1]]],out=new Set();
+  while(q.length){ q.sort((a,b)=>a[0]-b[0]); const [d,x,y]=q.shift(); if(d>best[K(x,y)]) continue;
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){ if(!dx&&!dy) continue; const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue;
+      const t=S.grid[ny][nx]; if(!ok.includes(t)) continue;
+      if(S.units.some(k=>free(k)&&k.pos[0]===nx&&k.pos[1]===ny)||S.buildings.some(b=>b.type==="wall"&&b.pos[0]===nx&&b.pos[1]===ny)) continue;
+      const nd=d+MC[t]; if(nd>MP[u.type]||nd>=(best[K(nx,ny)]??1e9)) continue; best[K(nx,ny)]=nd; out.add(K(nx,ny)); q.push([nd,nx,ny]); } }
+  return out;
+}
 const MAXHP={infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60};
 const WI={clear:"☀️ Clear",rain:"🌧 Rain",storm:"⛈ Storm"};
 const SCN_BLURB={skirmish:"Random map: capture or destroy the enemy HQ.",supply_run:"Tutorial: hold 2 supply bases by round 14. Walk infantry onto a base, then press Capture node.",hold_line:"Survive until round 15 against a brutal commander.",lean_war:"You start with half the food. Cut the enemy's supply roads before yours starve."};
@@ -107,6 +123,7 @@ const FRIENDLY={no_actions_left:"No moves left this turn. Press End turn.",not_v
 const STOP={blocked:"That tile is blocked.",out_of_mp:"Out of movement points.",cannot_afford:"Not enough resources to enter that terrain.",no_path:"No path to that tile.",frozen:"That unit is frozen (no supplies).",embarked:"That unit is aboard a boat.",no_actions_left:FRIENDLY.no_actions_left,not_adjacent:"Move tile by tile."};
 let S=null,ST=null,SIG=null,sel=null,mode="move",unloadId=null,busy=false,hover=null,startRes=null,REPLAY={initial:null,actions:[]},lastAction=null,flashT=null;
 const cv=$("cv"),ctx=cv.getContext("2d");
+let MV=null,mvTok=0,mvT=null; const mvCache=new Map();
 
 async function api(path,body){
   const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);
@@ -119,7 +136,7 @@ function mine(u){return u.owner==="player";}
 const free=u=>u.carrier===null||u.carrier===undefined;
 
 function apply(res){
-  S=res.snapshot; ST=res.state; SIG=res.sig;
+  MV=null; S=res.snapshot; ST=res.state; SIG=res.sig;
   if(res.result&&res.result.ok&&lastAction) REPLAY.actions.push(lastAction);
   lastAction=null; if(!REPLAY.initial) REPLAY.initial=ST; if(!startRes) startRes={...S.me.res};
   if(S.winner==="player"&&S.scenario!=="skirmish"){
@@ -166,20 +183,56 @@ function render(){
     const [x,y]=u.pos, cx=x*T+T/2, cy=y*T+T/2;
     ctx.beginPath(); ctx.arc(cx,cy,T*.36,0,7); ctx.fillStyle=u.frozen?"#a8b4bf":mine(u)?"#2f6fe4":"#d64541"; ctx.fill();
     ctx.lineWidth=u.id===sel?4:2; ctx.strokeStyle=u.id===sel?"#f2b705":u.frozen?"#e6f4ff":"#14202c"; ctx.stroke(); ctx.lineWidth=1;
-    ctx.fillStyle="#fff"; ctx.font="bold 13px sans-serif"; ctx.fillText(LETTER[u.type],cx,cy+1);
+    ctx.fillStyle="#fff"; ctx.font="15px sans-serif"; ctx.fillText(LETTER[u.type],cx,cy+1);
     if(u.frozen){ ctx.font="11px sans-serif"; ctx.fillText("❄",cx+10,cy-10); }
     const cg=S.units.filter(k=>k.carrier===u.id).length; if(cg){ ctx.font="bold 11px sans-serif"; ctx.fillStyle="#14202c"; ctx.fillText("+"+cg,cx-11,cy-10); }
     ctx.fillStyle="#14202c55"; ctx.fillRect(x*T+4,y*T+T-5,T-8,3); ctx.fillStyle=u.hp/MAXHP[u.type]>.4?"#2d8a57":"#c0392b"; ctx.fillRect(x*T+4,y*T+T-5,(T-8)*Math.max(0,u.hp)/MAXHP[u.type],3);
   });
   const vis=new Set(S.visible.map(c=>c[0]+","+c[1]));
   ctx.fillStyle="rgba(10,16,24,.5)"; for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(!vis.has(x+","+y)) ctx.fillRect(x*T,y*T,T,T);
+  const su=S.units.find(x=>x.id===sel);
+  if(mode==="move"&&su&&mine(su)&&!su.frozen&&S.active==="player"&&!S.winner&&S.actionsLeft>0){
+    reach(su).forEach(k=>{ const [x,y]=k.split(",").map(Number); ctx.fillStyle="rgba(47,111,228,.30)"; ctx.fillRect(x*T,y*T,T,T); });
+    S.units.filter(k=>!mine(k)&&free(k)&&Math.max(Math.abs(k.pos[0]-su.pos[0]),Math.abs(k.pos[1]-su.pos[1]))<=RNG[su.type]).forEach(k=>{ ctx.lineWidth=3; ctx.strokeStyle="#ff2d2d"; ctx.strokeRect(k.pos[0]*T+2,k.pos[1]*T+2,T-4,T-4); ctx.lineWidth=1; });
+  }
   const V=validTiles();
   if(V){ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     if(V.has(x+","+y)){ ctx.fillStyle="rgba(80,220,130,.40)"; ctx.fillRect(x*T,y*T,T,T); ctx.lineWidth=2; ctx.strokeStyle="#1fb85f"; ctx.strokeRect(x*T+1.5,y*T+1.5,T-3,T-3); ctx.lineWidth=1; }
     else { ctx.fillStyle="rgba(10,16,24,.6)"; ctx.fillRect(x*T,y*T,T,T); } } }
   if(hover){ ctx.lineWidth=2; ctx.strokeStyle="#fff"; ctx.strokeRect(hover[0]*T+1,hover[1]*T+1,T-2,T-2); ctx.lineWidth=1;
     if(V&&V.has(hover[0]+","+hover[1])){ ctx.globalAlpha=.75; ctx.font="18px sans-serif"; ctx.fillStyle="#000"; ctx.fillText(MODE_ICON[mode],hover[0]*T+T/2,hover[1]*T+T/2); ctx.globalAlpha=1; } }
+  if(MV&&hover&&su&&mode==="move"&&MV.x===hover[0]&&MV.y===hover[1]) drawMove(su);
   ui();
+}
+/* Exact move preview: asked from the server (same rules as the real move), debounced and cached. */
+function queueMove(x,y){
+  clearTimeout(mvT); MV=null; const u=S&&S.units.find(k=>k.id===sel);
+  if(!u||!mine(u)||u.frozen||mode!=="move"||S.active!=="player"||S.winner||S.actionsLeft<=0||busy||S.units.some(k=>free(k)&&k.pos[0]===x&&k.pos[1]===y)) return;
+  const key=SIG+"|"+u.id+"|"+x+","+y; if(mvCache.has(key)){ MV={...mvCache.get(key),x,y}; return; }
+  const tok=++mvTok;
+  mvT=setTimeout(async()=>{ try{
+    const r=await fetch("/api/preview_move",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state:ST,sig:SIG,unit:u.id,x,y})});
+    const p=r.ok?await r.json():null; if(!p||tok!==mvTok) return;
+    if(mvCache.size>200) mvCache.clear(); mvCache.set(key,p); MV={...p,x,y}; render(); }catch(e){} },140);
+}
+function tip(x,y,lines,bad){
+  ctx.font="12px sans-serif"; ctx.textAlign="left"; ctx.textBaseline="middle";
+  const w=Math.max(...lines.map(t=>ctx.measureText(t).width))+14, h=lines.length*16+8, W=S.grid[0].length*T;
+  const bx=Math.min(Math.max(2,x*T+T/2-w/2),W-w-2); let by=y*T-h-4; if(by<2) by=(y+1)*T+4;
+  ctx.fillStyle=bad?"#7a1f17":"#14202c"; ctx.fillRect(bx,by,w,h); ctx.fillStyle="#fff";
+  lines.forEach((t,i)=>ctx.fillText(t,bx+7,by+12+i*16)); ctx.textAlign="center"; ctx.textBaseline="middle";
+}
+function drawMove(u){
+  const m=MV;
+  if(!m.ok) return tip(m.x,m.y,[STOP[m.reason]||FRIENDLY[m.reason]||"Can't go there."],true);
+  if(!m.steps.length) return tip(m.x,m.y,["Can't move there: "+(STOP[m.stopped]||"blocked")],true);
+  ctx.strokeStyle="#f2b705"; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.beginPath(); ctx.moveTo(u.pos[0]*T+T/2,u.pos[1]*T+T/2);
+  m.steps.forEach(c=>ctx.lineTo(c[0]*T+T/2,c[1]*T+T/2)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=1;
+  const L=[`Uses ${m.mp_used} of ${m.mp} movement and 1 of ${S.actionsLeft} moves`];
+  const b=Object.entries(m.burn); if(!b.length) L.push("No supplies burned");
+  b.forEach(([k,v])=>L.push(`${ICON[k]} −${fmt(v)}  (${fmt(S.me.res[k])} → ${fmt(m.after[k])})`));
+  if(m.stopped) L.push(`⚠ Stops at (${m.end[0]},${m.end[1]}): ${STOP[m.stopped]||m.stopped}`);
+  tip(m.x,m.y,L,!!m.stopped);
 }
 
 const MODE_LABEL={wall:"wall",supply_base:"supply base",barracks:"barracks",defuse:"mine check",unload:"landing"};
@@ -226,6 +279,7 @@ function ui(){
   $("moralfill").style.width=me.moral+"%"; $("moralfill").style.background=me.moral<30?"var(--bad)":me.moral<50?"var(--warn)":"var(--ok)";
   $("moraltxt").innerHTML=`<b>${band} (${me.moral.toFixed(0)})</b>, enemy ${S.enemyMoral.toFixed(0)}<br>Income ×${me.incomeMult.toFixed(2)} · Upkeep ×${me.consumptionMult.toFixed(2)} · Supply bonus cap ×${me.supplyCap.toFixed(1)}`;
   $("fc").innerHTML=forecastHtml();
+  $("tc").innerHTML=Object.entries(S.terrainCost).map(([t,c])=>`<div>${TN[t]}: ${c.mp} movement · ${ICON[c.res]} ${fmt(c.amt)}</div>`).join("")+`<div style="margin-top:4px">Per tile entered, already including weather and morale. Armor and ships burn extra fuel each tile. Select a unit and hover a tile to see the exact bill.</div>`;
   const w=[],frozen=S.units.filter(u=>mine(u)&&u.frozen).length;
   RES.forEach(([k,i,n])=>{const v=me.res[k]; if(v<=.001) w.push(["crit",`${n} is empty: units that need it freeze.`]); else if(startRes&&v/startRes[k]<=.15) w.push(["warnc",`${n} is running low (${Math.floor(v)}).`]);});
   Object.entries(S.forecast||{}).forEach(([k,r])=>{ if(r.runs_out_in!==null&&r.runs_out_in<=3&&me.res[k]>.001) w.push(["crit",`${k[0].toUpperCase()+k.slice(1)} runs out in ${r.runs_out_in} round${r.runs_out_in===1?"":"s"} at the current rate.`]); });
@@ -259,18 +313,18 @@ function hint(){
   const u=S.units.find(x=>x.id===sel);
   h.textContent=S.winner?(S.winner==="player"?"Victory! Start a new game from the top bar.":"Defeat. Start a new game from the top bar."):S.active!=="player"?"Enemy is moving…"
    :mode==="bomb"?"Click the tile to bomb. Nearby units, even yours, take damage.":mode==="defuse"?"Step 2 of 2: click a green tile to check it for a mine (Esc cancels).":mode==="unload"?"Step 2 of 2: click a green land tile to unload (Esc cancels).":["wall","supply_base","barracks"].includes(mode)?`Step 2 of 2: click a green tile to build the ${MODE_LABEL[mode]} (Esc cancels).`:
-   S.actionsLeft===0?"No moves left. Press End turn.":u&&mine(u)?"Click a tile to move there, or click an enemy to attack, capture or bribe.":`Pick a unit. You have ${S.actionsLeft} moves this turn.`;
+   S.actionsLeft===0?"No moves left. Press End turn.":u&&mine(u)?(u.frozen?"This unit is frozen (no supplies). Pick another.":"Blue tiles = where this unit can move. Click one to go (hover any tile to see what it costs). Red box = enemy in range: click it to attack, capture or bribe."):`Pick a unit. You have ${S.actionsLeft} moves this turn.`;
 }
 
 function tileAt(ev){ const r=cv.getBoundingClientRect(), k=cv.width/(window.devicePixelRatio||1)/r.width; return [Math.floor((ev.clientX-r.left)*k/T),Math.floor((ev.clientY-r.top)*k/T)]; }
 cv.addEventListener("mousemove",ev=>{
   if(!S) return; const [x,y]=tileAt(ev), ter=S.grid[y]&&S.grid[y][x];
   if(!ter){ hover=null; $("info").textContent=""; return; }
-  if(!hover||hover[0]!==x||hover[1]!==y){ hover=[x,y]; render(); }
+  if(!hover||hover[0]!==x||hover[1]!==y){ hover=[x,y]; queueMove(x,y); render(); }
   const at=o=>o.pos[0]===x&&o.pos[1]===y, b=S.buildings.find(at), u=S.units.find(o=>at(o)&&free(o)), m=S.mines.find(at), v=S.visible.some(c=>c[0]===x&&c[1]===y);
   $("info").textContent=[`(${x},${y}) ${ter}`,b?`${b.type.replace("_"," ")}, ${b.owner||"neutral"}${b.turnsLeft?` (${b.turnsLeft} rounds left)`:""}`:"",u?`${u.owner} ${u.type}, rank ${u.rank}, hp ${u.hp}${u.frozen?", FROZEN":""}`:"",m?(m.owner==="player"?"your mine":"revealed enemy mine"):"",v?"":"in fog"].filter(Boolean).join(" · ");
 });
-cv.addEventListener("mouseleave",()=>{hover=null;if(S)render();});
+cv.addEventListener("mouseleave",()=>{hover=null;MV=null;mvTok++;clearTimeout(mvT);if(S)render();});
 cv.addEventListener("click",ev=>{
   if(!S||S.active!=="player"||S.winner) return;
   const [x,y]=tileAt(ev), clicked=S.units.find(u=>u.pos[0]===x&&u.pos[1]===y&&free(u)), mn=S.mines.find(m=>m.owner==="player"&&m.pos[0]===x&&m.pos[1]===y);
@@ -290,6 +344,9 @@ cv.addEventListener("click",ev=>{
   act({type:"move",unit:sel,x,y});
 });
 function setMode(m){ mode=m; render(); }
+function nextUnit(){ if(!S||S.active!=="player"||S.winner) return; const l=S.units.filter(u=>mine(u)&&free(u)&&!u.frozen); if(!l.length) return;
+  const i=l.findIndex(u=>u.id===sel); sel=l[(i+1)%l.length].id; mode="move"; render(); }
+$("nextunit").onclick=nextUnit;
 $("cancel").onclick=()=>{ mode="move"; render(); };
 async function act(a){ if(busy||!S||S.winner) return; busy=true; document.body.style.cursor="progress"; lastAction={...a};
   if(a.type==="end_turn"){ $("hint").className=""; $("hint").textContent="Enemy is moving…"; $("endturn").disabled=true; }
@@ -323,7 +380,7 @@ async function enemyMenu(t){
 $("endturn").onclick=()=>{ mode="move"; act({type:"end_turn"}); };
 $("codexbtn").onclick=()=>$("codex").showModal();
 $("replaybtn").onclick=()=>{ const b=new Blob([JSON.stringify({game:"war-chess",version:3,...REPLAY},null,1)],{type:"application/json"}), a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click(); };
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ mode="move"; if(S) render(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ mode="move"; if(S) render(); } else if((e.key==="n"||e.key==="N")&&!e.target.closest("dialog")) nextUnit(); });
 async function newGame(){
   startRes=null; sel=null; mode="move"; REPLAY={initial:null,actions:[]}; $("log").innerHTML=""; localStorage.removeItem(SAVE);
   const seed=new URLSearchParams(location.search).get("seed")||Math.floor(Math.random()*9999), sc=$("scn").value;
@@ -339,6 +396,7 @@ if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catc
     if(sv&&sv.state&&sv.sig){ startRes=sv.start||null; REPLAY=sv.replay||REPLAY; apply(await api("/api/load",{state:sv.state,sig:sv.sig})); log("💾 Resumed your saved game"); return; } }
   catch(e){ localStorage.removeItem(SAVE); }
   await newGame();
+  if(!localStorage.getItem("warchess.seen")){ localStorage.setItem("warchess.seen","1"); $("codex").showModal(); }
 })();
 </script>
 </body>

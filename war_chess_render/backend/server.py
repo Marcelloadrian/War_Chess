@@ -1,6 +1,6 @@
-"""server.py - STATELESS, SIGNED FastAPI app (Vercel-compatible).
+"""server.py - STATELESS, SIGNED FastAPI app (runs on Render).
 The browser stores the serialised game state + an HMAC signature and sends both with every
-action, so hand-edited saves are rejected. Set WARCHESS_SECRET in Vercel env vars (any long
+action, so hand-edited saves are rejected. Set WARCHESS_SECRET in the Render environment (any long
 random string); the default only suits local dev.
 Endpoints: GET /api/new, POST /api/load, /api/action, /api/preview, /api/log."""
 from __future__ import annotations
@@ -23,6 +23,8 @@ from engine import BuildingType, Side, dump_state, load_state
 app = FastAPI(title="War Chess")
 ME = Side.PLAYER
 SECRET = os.environ.get("WARCHESS_SECRET", "dev-only-secret-change-me").encode()
+if "WARCHESS_SECRET" not in os.environ and os.environ.get("RENDER"):
+    print("[warning] WARCHESS_SECRET is not set on Render: saves are signed with a public dev secret.")
 
 
 def _norm(x):
@@ -113,6 +115,27 @@ def preview(p: Preview):
     return json.loads(json.dumps(C.preview_engagement(s, p.unit, p.target), default=str))
 
 
+class MovePreview(Signed):
+    unit: int = Field(ge=0, le=10_000)
+    x: int = Field(ge=0, le=99)
+    y: int = Field(ge=0, le=99)
+
+
+@app.post("/api/preview_move")
+def preview_move(p: MovePreview):
+    """Exact cost of moving a unit to a tile (same pathfinding and rules as the real move). Deterministic."""
+    s = _restore(p.state, p.sig)
+    u = s.units.get(p.unit)
+    if not u or u.owner is not ME or s.winner or s.active is not ME:
+        return {"ok": False, "reason": "not_your_turn"}
+    if u.frozen or u.carrier is not None or s.actions_left(ME) <= 0:
+        return {"ok": False, "reason": "frozen" if u.frozen else "embarked" if u.carrier is not None else "no_actions_left"}
+    path = ai.find_path(s, u, (p.x, p.y))
+    if not path:
+        return {"ok": False, "reason": "no_path"}
+    return {"ok": True, **s.preview_path(u.id, path)}
+
+
 @app.post("/api/action")
 def action(a: Action):
     s = _restore(a.state, a.sig)
@@ -175,11 +198,11 @@ def action(a: Action):
 
 @app.post("/api/log")
 def client_log(body: ClientLog):
-    print(f"[client-error] {body.msg} @ {body.where}")     # appears in Vercel function logs
+    print(f"[client-error] {body.msg} @ {body.where}")     # appears in the Render logs
     return {"ok": True}
 
 
-# Local dev only: on Vercel, /public is served by the CDN before reaching this app.
+# Serves the static client (public/) from this same web service.
 _public = Path(__file__).resolve().parent.parent / "public"
 if _public.exists():
     app.mount("/", StaticFiles(directory=_public, html=True), name="public")

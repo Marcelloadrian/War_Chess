@@ -317,3 +317,35 @@ def test_forecast_no_payday_is_worst_case_and_snapshot_has_it():
     f = s.forecast(Side.PLAYER)["food"]
     assert f["runs_out_no_payday"] == 2 and (f["runs_out_in"] is None or f["runs_out_in"] > 2)
     assert "food" in s.snapshot(Side.PLAYER)["forecast"]
+
+
+def test_move_preview_matches_real_move():
+    import ai as _ai
+    for seed in (1, 2, 3, 4):
+        for weather in (Weather.CLEAR, Weather.RAIN):
+            base = game(seed); base.weather = weather
+            u = base.units_of(Side.PLAYER)[0]
+            for dx, dy in ((3, 0), (5, 1), (2, -2), (9, 0)):
+                goal = (u.pos[0] + dx, u.pos[1] + dy)
+                if not base.in_bounds(goal) or not base.can_enter(u, goal):
+                    continue
+                path = _ai.find_path(base, u, goal)
+                pv = base.preview_path(u.id, path)
+                real = load_state(dump_state(base)); real.weather = weather; C.install(real)
+                before = dict(real.factions[Side.PLAYER].res)
+                m = real.move_unit(u.id, path)
+                assert m["moved"] == len(pv["steps"]) and m["stopped"] == pv["stopped"]
+                spent = {r.value: before[r] - real.factions[Side.PLAYER].res[r] for r in Res}
+                for k, v in pv["burn"].items():
+                    assert abs(spent[k] - v) < 0.02
+                assert real.units[u.id].pos == tuple(pv["end"])
+
+
+def test_preview_move_endpoint():
+    from fastapi.testclient import TestClient
+    import server
+    c = TestClient(server.app); j = c.get("/api/new?seed=5").json()
+    uid = next(u["id"] for u in j["snapshot"]["units"] if u["owner"] == "player" and u["type"] == "infantry")
+    ux, uy = next(u["pos"] for u in j["snapshot"]["units"] if u["id"] == uid)
+    r = c.post("/api/preview_move", json={"state": j["state"], "sig": j["sig"], "unit": uid, "x": ux + 2, "y": uy}).json()
+    assert r["ok"] and r["steps"] and "terrainCost" in j["snapshot"]

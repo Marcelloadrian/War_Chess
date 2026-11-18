@@ -466,6 +466,26 @@ class GameState:
         self.evaluate_bankruptcy(u.owner)
         return {"moved": moved, "stopped": stopped}
 
+    def preview_path(self, unit_id: int, path: list[Coord]) -> dict:
+        """What move_unit(path) WOULD do (same checks, same order), without changing anything."""
+        u = self.units[unit_id]
+        res, mp_left, pos, steps, total, stopped = dict(self.factions[u.owner].res), u.spec.mp, u.pos, [], {}, None
+        for c in path:
+            if max(abs(c[0] - pos[0]), abs(c[1] - pos[1])) != 1:
+                stopped = "not_adjacent"; break
+            if not self.can_enter(u, c):
+                stopped = "blocked"; break
+            mp, burn = self.step_cost(u, c)
+            if mp > mp_left:
+                stopped = "out_of_mp"; break
+            if any(res[r] + 1e-9 < a for r, a in burn.items()):
+                stopped = "cannot_afford"; break
+            for r, a in burn.items():
+                res[r] -= a; total[r] = total.get(r, 0.0) + a
+            mp_left -= mp; pos = c; steps.append(list(c))
+        return {"steps": steps, "mp": u.spec.mp, "mp_used": u.spec.mp - mp_left, "burn": _ser(total),
+                "after": {r.value: round(res[r], 1) for r in total}, "stopped": stopped, "end": list(pos)}
+
     # ---- bankruptcy & vulnerability -------------------------------------- #
     def evaluate_bankruptcy(self, side: Side) -> list[int]:
         """Recompute `frozen` for every unit of `side`; returns changed ids."""
@@ -804,6 +824,10 @@ class GameState:
             "enemyMoral": self.factions[viewer.other].moral,
             "visible": [list(c) for c in self.visible_tiles(viewer)],
             "weather": self.weather.value, "objective": self.objective, "scenario": self.scenario,
+            "terrainCost": {t.value: {"mp": ts.move_cost, "res": ts.burn_res.value,
+                                      "amt": round(ts.burn_amt * self.consumption_mult(viewer)
+                                                   * WEATHER_MULT.get((self.weather, t), 1.0), 2)}
+                            for t, ts in TERRAIN.items()},
             "aiPersona": self.persona[viewer.other],
             "actionsLeft": self.actions_left(viewer), "maxActions": MAX_ACTIONS,
             "forecast": self.forecast(viewer),
