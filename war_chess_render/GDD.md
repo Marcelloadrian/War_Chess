@@ -322,3 +322,26 @@ Hard AI uses the same scorer; it just starts richer. No hidden bonuses, no omnis
 | **HQ commitment (AI)** | Infantry chased the nearest base and flipped bases back and forth (35-62 captures per game). Half the infantry (and all after round 40) now go straight for the enemy HQ. |
 
 Result (6 games per cell): Easy draws fell from 39% to 11% (player 72% / AI 17%). Medium and Hard still show ~44% draws, so stalemates are reduced, not solved. Next lever: smarter search when fog hides the enemy, or an HQ-siege objective.
+
+
+---
+
+## 12. v5: action budget and clearer HUD
+| Change | Detail |
+|---|---|
+| **5 actions per turn** | Player and AI alike. A move, attack, bribe, capture, build, mine plant/detonate/defuse, boarding or unloading each cost 1. Interrogation, releasing prisoners and ending the turn are free. Budget refreshes on End Turn. |
+| **HUD** | "Moves 3/5" counter; End Turn shows moves left and lights up at 0; "no moves left" message on a blocked action. |
+| **Payday label** | "Payday in N rounds". A round = your turn + enemy turn, so it only counts down on End Turn. (Verified by test: payday fires at rounds 5, 10, ...) |
+| **Map legend and tooltips** | Border colours explain building ownership; hovering any tile shows terrain, building, unit and fog state. |
+
+Simulation note (4 games per cell): the 5-action cap slows games; Hard now draws ~75% within 100 rounds and the Flanker commander looks strong again. Re-tune after real play, e.g. raise MAX_ACTIONS for the AI on Hard or lengthen the round cap.
+
+
+---
+
+## 13. v6: interface redesign
+Goal: make it obvious what to do next. A **command strip** above the map shows a plain-language hint, five move dots and the End turn button (green at 0 moves). Side panel order: goal, selected unit (costs on every button, greyed out when unaffordable), morale, warnings, prisoners, events. Resource chips explain themselves on hover; the map has a legend, hover details, and illegal clicks explain why in a sentence. The page was smoke-tested in a simulated browser against the live server (load, select, six moves until moves ran out, end turn, open guide): no runtime errors.
+
+**v6.1:** building, mine-check and unloading now show valid tiles. After choosing what to build, valid tiles light up green and every other tile is dimmed, a faint preview follows the cursor, a Cancel button and Esc back out, and clicking a bad tile explains what to do. Tested in a simulated browser.
+
+**v6.2: supply forecast.** The server computes, per resource with upkeep (food, fuel, money), the stock, upkeep per round, rounds until it hits 0 (with and without the next paydays) and the payday amount. It mirrors `begin_round` exactly and is tested against the real engine in 5 scenarios. Terrain burn is not included because it depends on where you move.

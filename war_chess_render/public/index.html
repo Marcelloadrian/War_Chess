@@ -5,286 +5,341 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>War Chess</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#14181c">
+<meta name="theme-color" content="#1d2733">
 <style>
-  :root{--bg:#14181c;--panel:#1d242b;--ink:#e6e9ec;--mut:#8a96a1;--ok:#5fb878;--warn:#e2b04a;--bad:#e0605a;--line:#2e3943}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
-  #top{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
-  .res{padding:2px 8px;border-radius:6px;background:#10151a} .res.low{color:var(--warn)} .res.empty{color:var(--bad);font-weight:700}
-  #main{flex:1;display:flex;min-height:0}
-  #boardwrap{flex:1;overflow:auto;padding:10px}
-  canvas{border:1px solid var(--line);cursor:pointer;max-width:100%}
-  #side{width:290px;background:var(--panel);border-left:1px solid var(--line);padding:10px;overflow:auto}
-  button,select{background:#2a3540;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 9px;margin:2px 2px 2px 0;cursor:pointer;font:inherit}
-  button:hover{background:#364452} button:disabled{opacity:.4;cursor:default}
-  button.primary{background:#2f6f48}
-  h4{margin:12px 0 4px;color:var(--mut);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.06em}
-  #moral{height:10px;background:#10151a;border-radius:5px;overflow:hidden;position:relative}
-  #moralfill{height:100%} #notch{position:absolute;left:30%;top:0;bottom:0;border-left:2px dashed var(--bad)}
-  .warn{color:var(--warn)} .crit{color:var(--bad)}
-  #log{font-size:12px;color:var(--mut);max-height:190px;overflow:auto;line-height:1.5}
-  #banner{display:none;padding:8px 12px;font-weight:700;text-align:center}
-  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;max-width:640px;max-height:80vh;overflow:auto;line-height:1.55}
-  dialog h3{margin-top:0} dialog h5{margin:12px 0 2px;color:var(--warn)} dialog::backdrop{background:#000a}
-  .legend span{display:inline-block;margin-right:8px;font-size:12px}
+:root{--ink:#1d2733;--mut:#5d6b78;--panel:#eef0ec;--card:#fff;--line:#cfd5cf;--me:#2f6fe4;--foe:#d64541;--ok:#2d8a57;--warn:#b7791f;--bad:#c0392b;--gold:#f2b705}
+*{box-sizing:border-box}
+body{margin:0;background:#dfe4de;color:var(--ink);font:15px/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+button,select{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--ink)} button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,canvas:focus-visible{outline:3px solid var(--me);outline-offset:2px}
+header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 14px;background:var(--ink);color:#fff}
+header h1{font-size:18px;margin:0 8px 0 0;font-weight:700;letter-spacing:.2px}
+header select,header button{background:#2b3a4a;color:#fff;border-color:#3d4f63}
+#chips{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.chip{background:#2b3a4a;border-radius:8px;padding:3px 9px;font-size:14px;white-space:nowrap}
+.chip.low{background:#7a5a12} .chip.empty{background:#8e2b22;font-weight:700}
+#app{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:12px;padding:12px;max-width:1500px;margin:auto}
+@media(max-width:960px){#app{grid-template-columns:1fr}}
+#cmd{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:10px}
+#hint{flex:1 1 280px;font-size:17px;font-weight:600} #hint.warn{color:var(--bad)}
+#pips{display:flex;gap:6px;align-items:center} #pips i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink);background:var(--gold)} #pips i.used{background:transparent;opacity:.35}
+#pipstxt{font-weight:600;min-width:84px}
+#endturn{background:var(--ink);color:#fff;border:0;padding:10px 18px;font-weight:700;font-size:16px;border-radius:10px}
+#endturn.ready{background:var(--ok);box-shadow:0 0 0 4px #bfe6cd}
+#boardbox{background:#c9d1c8;border-radius:12px;padding:8px}
+canvas{display:block;width:100%;height:auto;border-radius:8px;cursor:pointer;background:#9aa89a}
+#info{min-height:26px;margin-top:6px;color:var(--mut);font-size:14px}
+#legend{margin-top:8px;font-size:13px;color:var(--mut);display:flex;flex-wrap:wrap;gap:4px 14px}
+#legend b{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:2px solid}
+aside{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.card h3{margin:0 0 6px;font-size:15px;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.bar{height:10px;border-radius:5px;background:#d5dad4;overflow:hidden;position:relative}
+.bar>i{display:block;height:100%} .bar .notch{position:absolute;left:30%;top:0;bottom:0;border-left:2px dashed var(--bad)}
+.small{font-size:13px;color:var(--mut)} .crit{color:var(--bad)} .warnc{color:var(--warn)} .good{color:var(--ok)}
+#log{max-height:200px;overflow:auto;font-size:13px;line-height:1.5} #log div{border-bottom:1px solid #e1e5df;padding:2px 0}
+dialog{background:var(--card);color:var(--ink);border:2px solid var(--ink);border-radius:14px;max-width:560px;width:92vw;max-height:84vh;overflow:auto}
+dialog::backdrop{background:#0008} dialog h3{margin-top:0} dialog h4{margin:14px 0 4px}
+dialog .row button{flex:1 1 40%} button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{display:none;border-color:var(--bad);color:var(--bad);font-weight:600}
+@media(prefers-reduced-motion:no-preference){#endturn.ready{transition:box-shadow .2s}}
 </style>
 </head>
 <body>
-<div id="top"></div>
-<div id="banner"></div>
-<div id="main">
-  <div id="boardwrap"><canvas id="cv"></canvas></div>
-  <div id="side">
-    <div>
-      <select id="diff"><option>easy</option><option selected>medium</option><option>hard</option></select>
-      <select id="scn"><option value="skirmish">Skirmish</option><option value="supply_run">1. Supply Run</option><option value="hold_line">2. Hold the Line</option><option value="lean_war">3. Lean War</option></select>
-      <button id="newgame">New Game</button>
-      <button id="endturn" class="primary">End Turn</button>
-      <button id="codexbtn">📖 Codex</button><button id="replaybtn">⏺ Export replay</button>
+<header>
+  <h1>War Chess</h1>
+  <select id="diff" title="Difficulty"><option>easy</option><option selected>medium</option><option>hard</option></select>
+  <select id="scn" title="Mission"><option value="skirmish">Skirmish (random map)</option><option value="supply_run">1. Supply Run (tutorial)</option><option value="hold_line">2. Hold the Line</option><option value="lean_war">3. Lean War</option></select>
+  <button id="newgame">New game</button><button id="codexbtn">How to play</button><button id="replaybtn">Save replay</button>
+  <div id="chips"></div>
+</header>
+<div id="app">
+  <main>
+    <div id="cmd">
+      <div id="hint">Loading…</div>
+      <div id="pips" aria-label="Moves left"></div><div id="pipstxt"></div>
+      <button id="cancel">Cancel (Esc)</button><button id="endturn">End turn</button>
     </div>
-    <h4>Morale</h4>
-    <div id="moral"><div id="moralfill"></div><div id="notch" title="Below 30: supply bases give nothing"></div></div>
-    <div id="moraltxt" style="margin-top:4px;font-size:12px"></div>
-    <h4>Warnings</h4><div id="warns"></div>
-    <h4>Selected</h4><div id="sel">Click one of your blue units.</div>
-    <div id="actions"></div>
-    <h4>Prisoners</h4><div id="pris">None</div>
-    <h4>Mode</h4><div id="mode">Move / attack</div>
-    <h4>Legend</h4>
-    <div class="legend"><span>🟩 plains</span><span>🌲 forest</span><span>🧱 urban</span><span>🟫 mud</span><span>🌊 sea</span><span>💣 your mine</span><span>❄ frozen</span></div>
-    <h4>Log</h4><div id="log"></div>
-  </div>
+    <div id="boardbox"><canvas id="cv" tabindex="0" aria-label="Game map"></canvas></div>
+    <div id="info">Hover a tile for details.</div>
+    <div id="legend">
+      <span><b style="border-color:#2f6fe4"></b>your building</span><span><b style="border-color:#d64541"></b>enemy building</span><span><b style="border-color:#fff;background:#fff3"></b>neutral (capture it)</span>
+      <span>🏛 HQ</span><span>📦 supply base</span><span>⛺ barracks</span><span>🧱 wall</span><span>▦ ruins</span><span>≈ mud</span><span>⚓ sea</span><span>🌲 forest</span>
+      <span>darkened = fog</span><span>💣 your mine</span><span>❄ frozen</span>
+    </div>
+  </main>
+  <aside>
+    <div class="card" id="mission"></div>
+    <div class="card"><h3>Selected unit</h3><div id="sel" class="small">Click one of your blue circles on the map.</div><div id="actions"></div></div>
+    <div class="card"><h3>Morale</h3><div class="bar"><i id="moralfill"></i><span class="notch" title="Below 30, supply bases give nothing"></span></div><div id="moraltxt" class="small" style="margin-top:6px"></div></div>
+    <div class="card"><h3>Supply forecast</h3><div id="fc" class="small"></div></div>
+    <div class="card"><h3>Warnings</h3><div id="warns" class="small"></div></div>
+    <div class="card" id="prisoncard"><h3>Prisoners</h3><div id="pris" class="small">None</div></div>
+    <div class="card"><h3>Events</h3><div id="log"></div></div>
+  </aside>
 </div>
-<script>
-const T = 28;
-const COL = {plains:"#6b8f4e",forest:"#2f5d3a",urban:"#7d6a5c",mud:"#6a5a3c",sea:"#2b5f8c"};
-const GLYPH = {forest:"/",urban:"▦",mud:"≈",sea:"⚓"};
-const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-let S = null, ST = null, SIG = null, unloadId = null, sel = null, mode = "move", busy = false;
-let REPLAY = {initial:null, actions:[]}, lastAction = null;
-const SAVE = "warchess.save.v1";
 
-async function api(path, body){
-  const r = await fetch(path, body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : undefined);
-  if(!r.ok){ log("⚠ server error "+r.status, "crit"); throw new Error(r.status); }
+<dialog id="engage"><div id="engage-body"></div></dialog>
+<dialog id="codex"><h3>How to play</h3>
+<h4>Your turn</h4>You have <b>5 moves</b> per turn. Moving, attacking, building, planting a mine, boarding a boat or capturing each cost 1. The yellow dots show what is left. When the green <b>End turn</b> button lights up you are out of moves. The enemy then plays its 5. A <b>round</b> is your turn plus theirs.
+<h4>Win</h4>Capture or destroy the enemy HQ 🏛 by moving infantry onto it and pressing <b>Capture node</b>. Missions in the menu have their own goal (shown top right).
+<h4>Supplies</h4>Every unit eats <b>food</b> each round and moving burns resources by terrain: plains and forest burn food, ruins burn materials, mud burns fuel, sea burns money. When a unit's supply hits 0 it <b>freezes</b>, and any enemy with supplies beats a frozen unit instantly.
+<h4>Payday</h4>Every 5 rounds you get new supplies. Only supply bases 📦 <b>connected to your HQ by land</b> add to it. Enemy units and the tiles next to them cut the road. Low morale shrinks income.
+<h4>Capturing a base</h4>Select infantry, walk onto the base, press <b>Capture node</b>. It gives +5 morale.
+<h4>Fighting</h4>Click an enemy next to your unit for the engage screen: force attack, capture, or bribe. Force odds are estimates; a scout nearby sharpens them. Bribes can backfire into a double agent. You cannot attack what the fog hides.
+<h4>Mines and engineers</h4>A planted mine 💣 kills everyone on its tile when you detonate it, including your own units. Engineers (E) defuse adjacent mines.
+<h4>Boats</h4>A transport (T) carries 2 foot units. Walk next to it, press Board, sail, then Unload onto an adjacent land tile.
+<h4>No undo</h4>This is war: every move is final.
+<p><button class="primary" onclick="document.getElementById('codex').close()">Got it</button></p></dialog>
+
+<script>
+const T=30, SAVE="warchess.save.v1", $=id=>document.getElementById(id);
+const COL={plains:"#8fa77a",forest:"#5d8a5c",urban:"#9a8b7c",mud:"#8b7a55",sea:"#5b8fb9"};
+const GLYPH={forest:"🌲",urban:"▦",mud:"≈",sea:"⚓"};
+const RES=[["money","💰","Money","Bribes, building, sea travel"],["food","🌾","Food","Every unit eats 1 per round; forests burn extra"],["bullets","🔫","Bullets","Spent on each attack"],["bombs","💣","Bombs","Bomb strikes and mines"],["materials","🧱","Materials","Building; ruins burn them"],["fuel","⛽","Fuel","Mud, vehicles, ships"]];
+const LETTER={infantry:"I",armor:"A",destroyer:"D",transport:"T",engineer:"E",scout:"S"};
+const MAXHP={infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60};
+const WI={clear:"☀️ Clear",rain:"🌧 Rain",storm:"⛈ Storm"};
+const SCN_BLURB={skirmish:"Random map: capture or destroy the enemy HQ.",supply_run:"Tutorial: hold 2 supply bases by round 14. Walk infantry onto a base, then press Capture node.",hold_line:"Survive until round 15 against a brutal commander.",lean_war:"You start with half the food. Cut the enemy's supply roads before yours starve."};
+const FRIENDLY={no_actions_left:"No moves left this turn. Press End turn.",not_visible:"You can't see that target (fog).",out_of_range:"Target is out of range.",no_bullets:"Not enough bullets.",cannot_afford:"Not enough resources for that.",illegal_target:"You can't target that.",attacker_frozen:"That unit is frozen: no supplies.",cannot_plant:"Can't plant a mine here.",tile_unsuitable:"Can't plant a mine on this tile.",nothing_found:"No mine found on that tile.",not_your_turn:"It isn't your turn."};
+const STOP={blocked:"That tile is blocked.",out_of_mp:"Out of movement points.",cannot_afford:"Not enough resources to enter that terrain.",no_path:"No path to that tile.",frozen:"That unit is frozen (no supplies).",embarked:"That unit is aboard a boat.",no_actions_left:FRIENDLY.no_actions_left,not_adjacent:"Move tile by tile."};
+let S=null,ST=null,SIG=null,sel=null,mode="move",unloadId=null,busy=false,hover=null,startRes=null,REPLAY={initial:null,actions:[]},lastAction=null,flashT=null;
+const cv=$("cv"),ctx=cv.getContext("2d");
+
+async function api(path,body){
+  const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);
+  if(!r.ok){ log("Server error "+r.status+(r.status===400?" (save rejected or invalid)":""),"crit"); throw new Error(r.status); }
   return r.json();
 }
+function log(t,c){ const d=document.createElement("div"); d.textContent=t; if(c) d.className=c; $("log").prepend(d); }
+function flash(t){ const h=$("hint"); h.textContent=t; h.className="warn"; clearTimeout(flashT); flashT=setTimeout(()=>{h.className="";hint();},3500); }
+function mine(u){return u.owner==="player";}
+const free=u=>u.carrier===null||u.carrier===undefined;
 
 function apply(res){
-  S = res.snapshot; ST = res.state; SIG = res.sig;
-  if(res.result && res.result.ok && lastAction) REPLAY.actions.push(lastAction);
-  lastAction = null; if(!REPLAY.initial) REPLAY.initial = ST;
-  if(S.winner==="player" && S.scenario!=="skirmish"){      // campaign: veterans carry over
-    const r=S.units.filter(u=>u.owner==="player"&&["infantry","engineer"].includes(u.type)).map(u=>u.rank).sort((a,b)=>b-a).slice(0,8);
-    localStorage.setItem("warchess.vets", r.join(","));
+  S=res.snapshot; ST=res.state; SIG=res.sig;
+  if(res.result&&res.result.ok&&lastAction) REPLAY.actions.push(lastAction);
+  lastAction=null; if(!REPLAY.initial) REPLAY.initial=ST; if(!startRes) startRes={...S.me.res};
+  if(S.winner==="player"&&S.scenario!=="skirmish"){
+    const r=S.units.filter(u=>mine(u)&&["infantry","engineer"].includes(u.type)).map(u=>u.rank).sort((a,b)=>b-a).slice(0,8);
+    localStorage.setItem("warchess.vets",r.join(","));
   }
-  try{ localStorage.setItem(SAVE, JSON.stringify({state:ST, sig:SIG, start:window.startRes, replay:REPLAY})); }catch(e){}
+  try{ localStorage.setItem(SAVE,JSON.stringify({state:ST,sig:SIG,start:startRes,replay:REPLAY})); }catch(e){}
   (res.events||[]).forEach(logEvent);
-  if(res.result && !res.result.ok && res.result.kind!=="move") log("⚠ "+res.result.kind, "warn");
-  if(res.result && res.result.kind==="move" && !res.result.ok) log("⚠ cannot move: "+(res.result.detail.stopped||""), "warn");
-  if(sel && !S.units.find(u=>u.id===sel)) sel = null;
+  const r=res.result;
+  if(r&&!r.ok){ const m=r.kind==="move"?(STOP[r.detail.stopped]||"Can't move there."):(FRIENDLY[r.kind]||("Action failed: "+r.kind)); flash(m); log(m,"warnc"); }
+  if(sel&&!S.units.find(u=>u.id===sel)){ sel=null; mode="move"; }
   render();
 }
-
-function log(t, cls){ const d=document.createElement("div"); d.textContent=t; if(cls) d.className=cls;
-  const L=document.getElementById("log"); L.prepend(d); }
 function logEvent(e){
-  const m = {auto_win:`⚡ Auto-win vs bankrupt unit #${e.defender} (${e.result})`,
-    unit_frozen:`❄ Unit #${e.unit} frozen (out of supplies)`, unit_thawed:`🔥 Unit #${e.unit} resupplied`,
-    force_clash:`⚔ Clash ${e.fa} vs ${e.fd}: ${e.outcome}`, mine_detonated:`💥 Bomb: ${e.friendly_killed} friendly, ${e.enemy_killed} enemy killed`,
-    gacha_roll:`🎰 ${e.tier} (cost ${e.cost})`, payday:`💰 Payday (${e.side}) ×${e.supply_mult.toFixed(2)} supply, ×${e.moral_mult.toFixed(2)} morale${e.suppressed?" — SUPPRESSED":""}${e.disconnected?` — ${e.disconnected} base(s) CUT OFF`:""}`,
-    unit_captured:`⛓ Unit #${e.unit} captured`, building_captured:`🏴 ${e.btype} captured by ${e.owner}`,
-    build_finished:`🏗 ${e.btype} finished`, double_agent_revealed:`🕵 Double agent #${e.unit} revealed!`,
-    interrogated:`🔎 ${e.mode} interrogation, ${e.revealed.length} mines revealed`, armory_overflow:`📦 Armory full`,
-    unit_killed:`☠ ${e.owner} unit #${e.unit} lost (${e.cause})`, game_over:`🏁 ${e.winner} wins`, weather_changed:`🌦 Weather: ${e.weather}`, mine_defused:`🔧 Mine defused at ${e.pos}`, promoted:`⭐ Unit #${e.unit} promoted to rank ${e.rank}`, unit_loaded:`🚢 Unit #${e.unit} boarded transport #${e.carrier}`, unit_unloaded:`🏖 Unit #${e.unit} landed at ${e.pos}`};
-  if(m[e.type]) log(m[e.type], ["unit_frozen","unit_killed"].includes(e.type)?"crit":"");
+  const m={auto_win:[`⚡ Instant win vs bankrupt unit #${e.defender} (${e.result})`,"good"],unit_frozen:[`❄ Unit #${e.unit} froze: out of supplies`,"crit"],unit_thawed:[`Unit #${e.unit} resupplied`],
+  force_clash:[`⚔ Clash ${e.fa} vs ${e.fd}: ${e.outcome.replace("_"," ")}`],mine_detonated:[`💥 Mine: ${e.friendly_killed} friendly, ${e.enemy_killed} enemy killed`,"warnc"],
+  gacha_roll:[`🎰 Bribe result: ${e.tier.replace(/_/g," ")} (cost ${e.cost})`],payday:[`💰 Payday (${e.side}): supply ×${e.supply_mult.toFixed(2)}, morale ×${e.moral_mult.toFixed(2)}${e.suppressed?" — capped by low morale":""}${e.disconnected?` — ${e.disconnected} base(s) cut off`:""}`],
+  unit_captured:[`⛓ Unit #${e.unit} captured`],building_captured:[`🏴 ${e.btype.replace("_"," ")} captured by ${e.owner}`,e.owner==="player"?"good":"crit"],build_finished:[`🏗 ${e.btype.replace("_"," ")} finished`],
+  double_agent_revealed:[`🕵 Double agent #${e.unit} revealed!`,"crit"],interrogated:[`🔎 ${e.mode} interrogation: ${e.revealed.length} mines revealed`],armory_overflow:[`📦 Armory full: ammo lost`],
+  unit_killed:[`☠ ${e.owner} unit #${e.unit} lost (${e.cause.replace(/_/g," ")})`,e.owner==="player"?"crit":""],game_over:[`🏁 ${e.winner} wins`,"good"],weather_changed:[`🌦 Weather: ${e.weather}`],
+  mine_defused:[`🔧 Mine defused`],promoted:[`⭐ Unit #${e.unit} promoted to rank ${e.rank}`,"good"],unit_loaded:[`🚢 Unit #${e.unit} boarded`],unit_unloaded:[`🏖 Unit #${e.unit} landed`],conscripted:[`📯 ${e.side} drafted a recruit at its HQ`]}[e.type];
+  if(m) log(...m);
 }
 
 function render(){
-  if(!S) return;
-  const H=S.grid.length, W=S.grid[0].length; cv.width=W*T; cv.height=H*T;
+  const H=S.grid.length,W=S.grid[0].length, dpr=window.devicePixelRatio||1;
+  cv.width=W*T*dpr; cv.height=H*T*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const t=S.grid[y][x]; ctx.fillStyle=COL[t]; ctx.fillRect(x*T,y*T,T,T);
-    ctx.strokeStyle="rgba(0,0,0,.18)"; ctx.strokeRect(x*T,y*T,T,T);
-    if(GLYPH[t]){ ctx.fillStyle="rgba(255,255,255,.35)"; ctx.font="14px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(GLYPH[t],x*T+T/2,y*T+T/2); }
+    ctx.strokeStyle="rgba(0,0,0,.12)"; ctx.strokeRect(x*T+.5,y*T+.5,T,T);
+    if(GLYPH[t]){ ctx.globalAlpha=.55; ctx.font="14px sans-serif"; ctx.fillStyle="#fff"; ctx.fillText(GLYPH[t],x*T+T/2,y*T+T/2); ctx.globalAlpha=1; }
   }
   S.buildings.forEach(b=>{
     const [x,y]=b.pos, icon={hq:"🏛",supply_base:"📦",barracks:"⛺",wall:"🧱"}[b.type];
-    ctx.strokeStyle=b.owner==="player"?"#5aa2ff":b.owner==="ai"?"#e0605a":"#ddd"; ctx.lineWidth=2; ctx.strokeRect(x*T+2,y*T+2,T-4,T-4); ctx.lineWidth=1;
-    ctx.font="16px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle="#fff"; ctx.fillText(icon,x*T+T/2,y*T+T/2);
-    if(b.turnsLeft>0){ ctx.fillStyle="#000a"; ctx.fillRect(x*T,y*T,T,T); ctx.fillStyle="#fff"; ctx.font="11px sans-serif"; ctx.fillText("🏗"+b.turnsLeft,x*T+T/2,y*T+T/2); }
+    ctx.fillStyle="rgba(255,255,255,.55)"; ctx.fillRect(x*T+3,y*T+3,T-6,T-6);
+    ctx.lineWidth=3; ctx.strokeStyle=b.owner==="player"?"#2f6fe4":b.owner==="ai"?"#d64541":"#fff"; ctx.strokeRect(x*T+3,y*T+3,T-6,T-6); ctx.lineWidth=1;
+    ctx.font="16px sans-serif"; ctx.fillStyle="#000"; ctx.fillText(icon,x*T+T/2,y*T+T/2+1);
+    if(b.turnsLeft>0){ ctx.fillStyle="#000a"; ctx.fillRect(x*T+3,y*T+3,T-6,T-6); ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.fillText("🏗"+b.turnsLeft,x*T+T/2,y*T+T/2); }
   });
-  S.mines.forEach(m=>{ ctx.font="14px sans-serif"; ctx.fillStyle="#fff"; ctx.textAlign="right"; ctx.textBaseline="top"; ctx.fillText(m.owner==="player"?"💣":"◇",m.pos[0]*T+T-1,m.pos[1]*T+1); });
+  S.mines.forEach(m=>{ ctx.font="12px sans-serif"; ctx.fillStyle="#000"; ctx.textAlign="right"; ctx.textBaseline="top"; ctx.fillText(m.owner==="player"?"💣":"◇",m.pos[0]*T+T-1,m.pos[1]*T+1); ctx.textAlign="center"; ctx.textBaseline="middle"; });
   S.units.forEach(u=>{
-    if(u.carrier!==null&&u.carrier!==undefined) return;        // embarked units are not on the map
+    if(!free(u)) return;
     const [x,y]=u.pos, cx=x*T+T/2, cy=y*T+T/2;
-    ctx.beginPath(); ctx.arc(cx,cy,T*0.36,0,7); ctx.fillStyle=u.frozen?"#9aa7b3":u.owner==="player"?"#3f7be0":"#d24a43"; ctx.fill();
-    ctx.lineWidth=u.id===sel?3:1.5; ctx.strokeStyle=u.id===sel?"#ffe36b":u.frozen?"#bfe6ff":"#111"; ctx.stroke(); ctx.lineWidth=1;
-    ctx.fillStyle="#fff"; ctx.font="bold 12px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText({infantry:"I",armor:"A",destroyer:"D",transport:"T",engineer:"E",scout:"S"}[u.type],cx,cy);
-    if(u.frozen) ctx.fillText("❄",cx+9,cy-9);
-    const cg=S.units.filter(k=>k.carrier===u.id).length; if(cg) ctx.fillText("+"+cg,cx-10,cy-10);
-    ctx.fillStyle="#2c2"; ctx.fillRect(x*T+3,y*T+T-5,(T-6)*Math.max(0,u.hp)/ ({infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60}[u.type]),3);
+    ctx.beginPath(); ctx.arc(cx,cy,T*.36,0,7); ctx.fillStyle=u.frozen?"#a8b4bf":mine(u)?"#2f6fe4":"#d64541"; ctx.fill();
+    ctx.lineWidth=u.id===sel?4:2; ctx.strokeStyle=u.id===sel?"#f2b705":u.frozen?"#e6f4ff":"#14202c"; ctx.stroke(); ctx.lineWidth=1;
+    ctx.fillStyle="#fff"; ctx.font="bold 13px sans-serif"; ctx.fillText(LETTER[u.type],cx,cy+1);
+    if(u.frozen){ ctx.font="11px sans-serif"; ctx.fillText("❄",cx+10,cy-10); }
+    const cg=S.units.filter(k=>k.carrier===u.id).length; if(cg){ ctx.font="bold 11px sans-serif"; ctx.fillStyle="#14202c"; ctx.fillText("+"+cg,cx-11,cy-10); }
+    ctx.fillStyle="#14202c55"; ctx.fillRect(x*T+4,y*T+T-5,T-8,3); ctx.fillStyle=u.hp/MAXHP[u.type]>.4?"#2d8a57":"#c0392b"; ctx.fillRect(x*T+4,y*T+T-5,(T-8)*Math.max(0,u.hp)/MAXHP[u.type],3);
   });
-  const vis=new Set(S.visible.map(c=>c[0]+","+c[1]));       // fog of war overlay
-  ctx.fillStyle="rgba(5,8,12,.58)";
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(!vis.has(x+","+y)) ctx.fillRect(x*T,y*T,T,T);
-  hud();
+  const vis=new Set(S.visible.map(c=>c[0]+","+c[1]));
+  ctx.fillStyle="rgba(10,16,24,.5)"; for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(!vis.has(x+","+y)) ctx.fillRect(x*T,y*T,T,T);
+  const V=validTiles();
+  if(V){ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(V.has(x+","+y)){ ctx.fillStyle="rgba(80,220,130,.40)"; ctx.fillRect(x*T,y*T,T,T); ctx.lineWidth=2; ctx.strokeStyle="#1fb85f"; ctx.strokeRect(x*T+1.5,y*T+1.5,T-3,T-3); ctx.lineWidth=1; }
+    else { ctx.fillStyle="rgba(10,16,24,.6)"; ctx.fillRect(x*T,y*T,T,T); } } }
+  if(hover){ ctx.lineWidth=2; ctx.strokeStyle="#fff"; ctx.strokeRect(hover[0]*T+1,hover[1]*T+1,T-2,T-2); ctx.lineWidth=1;
+    if(V&&V.has(hover[0]+","+hover[1])){ ctx.globalAlpha=.75; ctx.font="18px sans-serif"; ctx.fillStyle="#000"; ctx.fillText(MODE_ICON[mode],hover[0]*T+T/2,hover[1]*T+T/2); ctx.globalAlpha=1; } }
+  ui();
 }
 
-function hud(){
-  const me=S.me, st=window.startRes||(window.startRes={...me.res});
-  document.getElementById("top").innerHTML =
-    `<b>Round ${S.round}</b> <span class="res">${S.difficulty.toUpperCase()}</span>`+
-    [["💰","money"],["🌾","food"],["🔫","bullets"],["💣","bombs"],["🧱","materials"],["⛽","fuel"]].map(([i,k])=>{
-      const v=me.res[k], c=v<=0.001?"empty":v/st[k]<=0.15?"low":""; return `<span class="res ${c}">${i} ${Math.floor(v)}</span>`;}).join("")+
-    `<span class="res">Armory ${Math.floor(me.res.bullets+me.res.bombs)}/${Math.floor(me.armoryCap)}</span>`+
-    `<span class="res">Payday in ${S.paydayIn}</span><span>${S.active==="player"?"Your turn":"Enemy turn"}</span>`;
-  const mf=document.getElementById("moralfill"); mf.style.width=me.moral+"%"; mf.style.background=me.moral<30?"var(--bad)":me.moral<50?"var(--warn)":"var(--ok)";
-  document.getElementById("moraltxt").textContent=`Moral ${me.moral.toFixed(0)} (enemy ${S.enemyMoral.toFixed(0)}) · income ×${me.incomeMult.toFixed(2)} · burn ×${me.consumptionMult.toFixed(2)} · supply cap ×${me.supplyCap.toFixed(2)}`;
-  const w=[]; const frozen=S.units.filter(u=>u.owner==="player"&&u.frozen).length;
-  Object.entries(me.res).forEach(([k,v])=>{ if(v<=0.001) w.push(["crit",`${k} depleted — units freeze`]); else if(v/st[k]<=0.15) w.push(["warn",`${k} low (${Math.floor(v)})`]); });
-  if(me.moral<30) w.push(["crit","Morale <30: supply bases give nothing"]);
-  if(frozen) w.push(["crit",`${frozen} frozen unit(s): instant loss if attacked`]);
-  document.getElementById("warns").innerHTML=w.length?w.map(([c,t])=>`<div class="${c}">• ${t}</div>`).join(""):"<span style='color:var(--mut)'>None</span>";
-  const b=document.getElementById("banner");
-  if(S.winner){ b.style.display="block"; b.textContent=S.winner==="player"?"🏆 VICTORY":"💀 DEFEAT"; b.style.background=S.winner==="player"?"#2f6f48":"#7a2d29"; } else b.style.display="none";
-  document.getElementById("pris").innerHTML=S.prisoners.length?S.prisoners.map(p=>
-    `#${p.id} ${p.type} <button onclick="act({type:'interrogate',target:${p.id},mode:'resource'})">Resource</button><button onclick="act({type:'interrogate',target:${p.id},mode:'force'})" title="Lethal, −8 morale">Force</button><button onclick="act({type:'release',target:${p.id}})">Release</button>`).join("<br>"):"None";
-  const u=S.units.find(u=>u.id===sel), A=document.getElementById("actions"), SEL=document.getElementById("sel");
-  document.getElementById("mode").textContent={move:"Move / attack",bomb:"Click tile to bomb",wall:"Click adjacent tile: Wall",supply_base:"Click adjacent tile: Supply Base",barracks:"Click adjacent tile: Barracks",defuse:"Click adjacent tile: defuse mine",unload:"Click adjacent land tile to unload"}[mode];
-  if(!u){ SEL.textContent="Click one of your blue units."; A.innerHTML=""; return; }
-  SEL.textContent=`#${u.id} ${u.type} rank ${u.rank} hp ${u.hp}${u.frozen?" — FROZEN":""}`;
-  A.innerHTML=[["plant","💣 Plant bomb"],["capture_node","🏴 Capture node"],["surround","⭕ Capture surrounded"]].map(([t,l])=>`<button onclick="act({type:'${t}',unit:${u.id}})">${l}</button>`).join("")+
-    `<br>`+[["wall","Wall"],["supply_base","Supply"],["barracks","Barracks"],["bomb","Drop bomb"]].map(([m,l])=>`<button onclick="setMode('${m}')">🔨 ${l}</button>`).join("");
+const MODE_LABEL={wall:"wall",supply_base:"supply base",barracks:"barracks",defuse:"mine check",unload:"landing"};
+const MODE_ICON={wall:"🧱",supply_base:"📦",barracks:"⛺",defuse:"🔧",unload:"🏖"};
+/* Tiles where the current placement mode can be used (mirrors the server rules). null = not a placement mode. */
+function validTiles(){
+  if(!S||!["wall","supply_base","barracks","defuse","unload"].includes(mode)) return null;
+  const u=S.units.find(x=>x.id===sel); if(!u) return null;
+  const out=new Set(), H=S.grid.length, W=S.grid[0].length;
+  const occ=(x,y)=>S.units.some(k=>free(k)&&k.pos[0]===x&&k.pos[1]===y);
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+    if(!dx&&!dy) continue; const x=u.pos[0]+dx, y=u.pos[1]+dy; if(x<0||y<0||x>=W||y>=H) continue;
+    const ter=S.grid[y][x], b=S.buildings.find(b=>b.pos[0]===x&&b.pos[1]===y);
+    if(mode==="defuse") out.add(x+","+y);
+    else if(mode==="unload"){ if(ter!=="sea"&&!occ(x,y)&&!(b&&b.type==="wall")) out.add(x+","+y); }
+    else if(ter!=="sea"&&!b&&!occ(x,y)) out.add(x+","+y);
+  }
+  return out;
+}
+function forecastHtml(){
+  const f=S.forecast||{}, rows=[["food","🌾","Food"],["fuel","⛽","Fuel"],["money","💰","Money"]].filter(([k])=>f[k]), pd=S.paydayIn;
+  if(!rows.length) return "No units, so no upkeep.";
+  return rows.map(([k,i,n])=>{
+    const r=f[k], o=r.runs_out_in, cls=o===null?"good":o<=3?"crit":o<=8?"warnc":"good", worst=r.runs_out_no_payday===null?"40+":r.runs_out_no_payday;
+    const next=Math.max(0,r.stock-r.upkeep)+(pd===1?r.payday_amount:0);
+    return `<div style="margin-bottom:9px"><b>${i} ${n}: ${r.stock}</b> <span>(−${r.upkeep} each round)</span><br><b class="${cls}">${o===null?"Lasts 40+ more rounds":`Hits 0 after ${o} more round${o===1?"":"s"}`}</b> · next round: ${next.toFixed(1)}<div>Payday +${r.payday_amount} in ${pd} round${pd===1?"":"s"} · with no payday: ${worst} round${worst===1?"":"s"}</div></div>`;
+  }).join("")+`<div>Upkeep only, if your units stand still. Moving burns extra per tile: plains 0.5 food, forest 2 food, ruins 2 materials, mud 2 fuel, sea 3 money (more in rain or storms, or at low morale).</div>`;
+}
+function chip(label,cls,tip){ return `<span class="chip ${cls||""}" title="${tip||""}">${label}</span>`; }
+function ui(){
+  const me=S.me, left=S.actionsLeft, over=!!S.winner, mineTurn=S.active==="player"&&!over;
+  $("chips").innerHTML=chip(`Round ${S.round}`,"","A round = your turn + the enemy's")+RES.map(([k,i,n,tip])=>{
+    const v=me.res[k], c=v<=.001?"empty":startRes&&v/startRes[k]<=.15?"low":""; return chip(`${i} ${Math.floor(v)}`,c,`${n}: ${tip}`);}).join("")
+    +chip(`Armory ${Math.floor(me.res.bullets+me.res.bombs)}/${Math.floor(me.armoryCap)}`,"","Bullets + bombs share this cap; barracks lower it")
+    +chip(WI[S.weather]||S.weather,"","Rain and storms raise terrain burn")+chip(`💰 Payday in ${S.paydayIn} round${S.paydayIn===1?"":"s"}`,"","Counts down only when you press End turn");
+  $("pips").innerHTML=Array.from({length:S.maxActions},(_,i)=>`<i class="${i<left?"":"used"}"></i>`).join("");
+  $("pipstxt").textContent=over?"":`${left} of ${S.maxActions} moves`;
+  $("cancel").style.display=mode!=="move"?"inline-block":"none";
+  const eb=$("endturn"); eb.disabled=over; eb.className=left===0&&mineTurn?"ready":""; eb.textContent=over?"Game over":left===0?"End turn ▶ (no moves left)":"End turn";
+  const o=S.objective;
+  $("mission").innerHTML=`<h3>${over?(S.winner==="player"?"🏆 Victory":"💀 Defeat"):"Your goal"}</h3>${o?(o.type==="survive"?`Survive until round ${o.rounds}.`:`Hold ${o.count} supply bases by round ${o.rounds}.`):"Capture or destroy the enemy HQ 🏛."}
+    <div class="small" style="margin-top:6px">Supply roads connected: <b>${S.supplyConnected}/${S.supplyTotal}</b> bases · Enemy commander: ${S.aiPersona}</div>`;
+  const band=me.moral<25?"Broken":me.moral<50?"Shaken":me.moral<75?"Steady":"High";
+  $("moralfill").style.width=me.moral+"%"; $("moralfill").style.background=me.moral<30?"var(--bad)":me.moral<50?"var(--warn)":"var(--ok)";
+  $("moraltxt").innerHTML=`<b>${band} (${me.moral.toFixed(0)})</b>, enemy ${S.enemyMoral.toFixed(0)}<br>Income ×${me.incomeMult.toFixed(2)} · Upkeep ×${me.consumptionMult.toFixed(2)} · Supply bonus cap ×${me.supplyCap.toFixed(1)}`;
+  $("fc").innerHTML=forecastHtml();
+  const w=[],frozen=S.units.filter(u=>mine(u)&&u.frozen).length;
+  RES.forEach(([k,i,n])=>{const v=me.res[k]; if(v<=.001) w.push(["crit",`${n} is empty: units that need it freeze.`]); else if(startRes&&v/startRes[k]<=.15) w.push(["warnc",`${n} is running low (${Math.floor(v)}).`]);});
+  Object.entries(S.forecast||{}).forEach(([k,r])=>{ if(r.runs_out_in!==null&&r.runs_out_in<=3&&me.res[k]>.001) w.push(["crit",`${k[0].toUpperCase()+k.slice(1)} runs out in ${r.runs_out_in} round${r.runs_out_in===1?"":"s"} at the current rate.`]); });
+  if(me.moral<30) w.push(["crit","Morale under 30: supply bases give you nothing."]);
+  if(frozen) w.push(["crit",`${frozen} frozen unit(s): any enemy with supplies beats them instantly.`]);
+  $("warns").innerHTML=w.length?w.map(([c,t])=>`<div class="${c}">• ${t}</div>`).join(""):"<span class='good'>All clear</span>";
+  $("pris").innerHTML=S.prisoners.length?S.prisoners.map(p=>`#${p.id} ${p.type}<div class="row"><button data-a="interrogate" data-id="${p.id}" data-mode="resource" title="Costs money, prisoner lives">Question (costs money)</button><button data-a="interrogate" data-id="${p.id}" data-mode="force" title="Prisoner dies, −8 morale">Force (−8 morale)</button><button data-a="release" data-id="${p.id}" title="+1.5 morale">Release</button></div>`).join("<hr>"):"None";
+  unitCard(); hint();
 }
 
-function setMode(m){ mode=m; hud(); }
-async function act(a){ if(busy||!S||S.winner) return; busy=true; lastAction={...a}; try{ apply(await api("/api/action",{...a,state:ST,sig:SIG})); } finally{ busy=false; } }
-cv.addEventListener("click", ev=>{
-  if(!S||S.active!=="player") return;
-  const r=cv.getBoundingClientRect(), sx=cv.width/r.width;
-  const x=Math.floor((ev.clientX-r.left)*sx/T), y=Math.floor((ev.clientY-r.top)*sx/T);
-  const clicked=S.units.find(u=>u.pos[0]===x&&u.pos[1]===y&&(u.carrier===null||u.carrier===undefined));
-  const mine=S.mines.find(m=>m.owner==="player"&&m.pos[0]===x&&m.pos[1]===y);
+function unitCard(){
+  const u=S.units.find(x=>x.id===sel), A=$("actions"), res=S.me.res, can=S.actionsLeft>0&&S.active==="player"&&!S.winner;
+  if(!u||!mine(u)){ $("sel").innerHTML="Click one of your <b style='color:var(--me)'>blue circles</b> on the map."; A.innerHTML=""; return; }
+  $("sel").innerHTML=`<b>${u.type[0].toUpperCase()+u.type.slice(1)} #${u.id}</b> ${"★".repeat(u.rank)}<br>HP ${u.hp}/${MAXHP[u.type]} · ${u.kills||0} kills${u.frozen?"<br><span class='crit'>Frozen: no supplies, can't move.</span>":""}`;
+  const aff=c=>Object.entries(c).every(([k,v])=>res[k]>=v), B=(lbl,a,ok,tip,extra="")=>`<button data-a="${a}" class="${a===mode?"on":""}" ${ok&&can?"":"disabled"} title="${tip}" ${extra}>${lbl}</button>`;
+  const tr=S.units.find(k=>mine(k)&&k.type==="transport"&&Math.max(Math.abs(k.pos[0]-u.pos[0]),Math.abs(k.pos[1]-u.pos[1]))<=1);
+  let h=`<div class="small" style="margin-top:8px">Unit actions (1 move each)</div><div class="row">`
+   +B("💣 Plant mine","plant",!u.frozen&&aff({bombs:1,materials:2}),"Costs 1 bomb + 2 materials. Hidden. Kills everyone on the tile when detonated.")
+   +B("🏴 Capture node","capture_node",u.type==="infantry"&&!u.frozen,"Infantry only, standing on a base, HQ or building")
+   +(u.type==="engineer"?B("🔧 Defuse","defuse",!u.frozen,"Then click an adjacent tile"):"")
+   +(tr&&["infantry","engineer","scout"].includes(u.type)?B(`🚢 Board #${tr.id}`,"board",!u.frozen,"Boat must be adjacent and have room",`data-tr="${tr.id}"`):"")
+   +(u.type==="transport"?S.units.filter(k=>k.carrier===u.id).map(k=>B(`🏖 Unload #${k.id}`,"unload",true,"Then click an adjacent land tile",`data-k="${k.id}"`)).join(""):"")
+   +`</div><div class="small" style="margin-top:8px">Build next to this unit: pick one, then click a green tile</div><div class="row">`
+   +B("Wall · 10🧱","wall",aff({materials:10}),"Blocks movement")+B("Supply base · 40🧱 30💰","supply_base",aff({materials:40,money:30}),"Takes 3 rounds; pays at payday if connected to HQ")+B("Barracks · 35🧱 20💰","barracks",aff({materials:35,money:20}),"Free infantry each payday, but lowers the armory cap")
+   +`</div><div class="small" style="margin-top:8px">Army-wide</div><div class="row">`+B("⭕ Capture surrounded","surround",true,"Captures enemy infantry you have completely surrounded")+B("💥 Bomb a tile","bomb",aff({bombs:1}),"Click any tile. Hits an area, destroys walls, can hit your own units")+`</div>`;
+  A.innerHTML=h;
+}
+
+function hint(){
+  const h=$("hint"); if(h.className==="warn") return;
+  const u=S.units.find(x=>x.id===sel);
+  h.textContent=S.winner?(S.winner==="player"?"Victory! Start a new game from the top bar.":"Defeat. Start a new game from the top bar."):S.active!=="player"?"Enemy is moving…"
+   :mode==="bomb"?"Click the tile to bomb. Nearby units, even yours, take damage.":mode==="defuse"?"Step 2 of 2: click a green tile to check it for a mine (Esc cancels).":mode==="unload"?"Step 2 of 2: click a green land tile to unload (Esc cancels).":["wall","supply_base","barracks"].includes(mode)?`Step 2 of 2: click a green tile to build the ${MODE_LABEL[mode]} (Esc cancels).`:
+   S.actionsLeft===0?"No moves left. Press End turn.":u&&mine(u)?"Click a tile to move there, or click an enemy to attack, capture or bribe.":`Pick a unit. You have ${S.actionsLeft} moves this turn.`;
+}
+
+function tileAt(ev){ const r=cv.getBoundingClientRect(), k=cv.width/(window.devicePixelRatio||1)/r.width; return [Math.floor((ev.clientX-r.left)*k/T),Math.floor((ev.clientY-r.top)*k/T)]; }
+cv.addEventListener("mousemove",ev=>{
+  if(!S) return; const [x,y]=tileAt(ev), ter=S.grid[y]&&S.grid[y][x];
+  if(!ter){ hover=null; $("info").textContent=""; return; }
+  if(!hover||hover[0]!==x||hover[1]!==y){ hover=[x,y]; render(); }
+  const at=o=>o.pos[0]===x&&o.pos[1]===y, b=S.buildings.find(at), u=S.units.find(o=>at(o)&&free(o)), m=S.mines.find(at), v=S.visible.some(c=>c[0]===x&&c[1]===y);
+  $("info").textContent=[`(${x},${y}) ${ter}`,b?`${b.type.replace("_"," ")}, ${b.owner||"neutral"}${b.turnsLeft?` (${b.turnsLeft} rounds left)`:""}`:"",u?`${u.owner} ${u.type}, rank ${u.rank}, hp ${u.hp}${u.frozen?", FROZEN":""}`:"",m?(m.owner==="player"?"your mine":"revealed enemy mine"):"",v?"":"in fog"].filter(Boolean).join(" · ");
+});
+cv.addEventListener("mouseleave",()=>{hover=null;if(S)render();});
+cv.addEventListener("click",ev=>{
+  if(!S||S.active!=="player"||S.winner) return;
+  const [x,y]=tileAt(ev), clicked=S.units.find(u=>u.pos[0]===x&&u.pos[1]===y&&free(u)), mn=S.mines.find(m=>m.owner==="player"&&m.pos[0]===x&&m.pos[1]===y);
+  const V=validTiles(), key=x+","+y;
+  if(V){
+    if(clicked&&mine(clicked)&&!V.has(key)){ mode="move"; sel=clicked.id; return render(); }     // switching units cancels the mode
+    if(!V.has(key)) return flash("That tile won't work. Click a green tile, or press Esc to cancel.");
+  }
   if(mode==="unload"){ mode="move"; return act({type:"unload",unit:unloadId,x,y}); }
-  if(mode==="defuse"){ mode="move"; return sel?act({type:"defuse",unit:sel,x,y}):hud(); }
+  if(mode==="defuse"){ mode="move"; return sel?act({type:"defuse",unit:sel,x,y}):ui(); }
   if(mode==="bomb"){ mode="move"; return act({type:"bomb",x,y}); }
-  if(["wall","supply_base","barracks"].includes(mode)){ const b=mode; mode="move"; return sel?act({type:"build",unit:sel,btype:b,x,y}):hud(); }
-  if(clicked&&clicked.owner==="player"){ sel=clicked.id; return render(); }
-  if(mine&&!sel){ if(confirm("Detonate this bomb? It kills EVERY unit on the tile, including yours.")) return act({type:"detonate",x,y}); }
-  if(!sel) return;
-  if(clicked&&clicked.owner==="ai") return enemyMenu(clicked);
-  if(mine&&confirm("Detonate bomb at this tile? (kills friend AND foe)")) return act({type:"detonate",x,y});
+  if(["wall","supply_base","barracks"].includes(mode)){ const b=mode; mode="move"; return sel?act({type:"build",unit:sel,btype:b,x,y}):ui(); }
+  if(clicked&&mine(clicked)){ sel=clicked.id; return render(); }
+  if(mn&&confirm("Detonate this mine? It kills EVERY unit on the tile, including yours.")) return act({type:"detonate",x,y});
+  if(!sel) return flash("Select one of your units first.");
+  if(clicked&&!mine(clicked)) return enemyMenu(clicked);
   act({type:"move",unit:sel,x,y});
 });
+function setMode(m){ mode=m; render(); }
+$("cancel").onclick=()=>{ mode="move"; render(); };
+async function act(a){ if(busy||!S||S.winner) return; busy=true; document.body.style.cursor="progress"; lastAction={...a};
+  if(a.type==="end_turn"){ $("hint").className=""; $("hint").textContent="Enemy is moving…"; $("endturn").disabled=true; }
+  try{ apply(await api("/api/action",{...a,state:ST,sig:SIG})); } catch(e){ if(S) ui(); } finally{ busy=false; document.body.style.cursor=""; } }
 
-function enemyMenu(t){
-  const u=S.units.find(u=>u.id===sel);
-  const auto=t.frozen?"\n\n⚡ Target is BANKRUPT — Force attack wins instantly.":"";
-  const c=prompt(`Engage enemy #${t.id} (${t.type}, rank ${t.rank}, hp ${t.hp}${t.frozen?", FROZEN":""})${auto}\n\n1 = Force attack\n2 = Force attack + capture (infantry/frozen)\n3 = Bribe (1×)\n4 = Bribe (2×)\n5 = Bribe (3×)\n6 = Try single capture`,"1");
-  if(c==="1") act({type:"attack",unit:u.id,target:t.id});
-  else if(c==="2") act({type:"attack",unit:u.id,target:t.id,capture:true});
-  else if(c==="3"||c==="4"||c==="5") act({type:"bribe",unit:u.id,target:t.id,offer:+c-2});
-  else if(c==="6") act({type:"capture_unit",unit:u.id,target:t.id});
+document.addEventListener("click",ev=>{
+  const b=ev.target.closest("button[data-a]"); if(!b||b.disabled) return; const d=b.dataset;
+  if(d.a==="plant"||d.a==="capture_node") act({type:d.a,unit:sel});
+  else if(d.a==="surround") act({type:"surround",unit:sel});
+  else if(d.a==="board") act({type:"load",unit:sel,target:+d.tr});
+  else if(d.a==="unload"){ unloadId=+d.k; setMode("unload"); }
+  else if(["defuse","wall","supply_base","barracks","bomb"].includes(d.a)) setMode(d.a);
+  else if(d.a==="interrogate") act({type:"interrogate",target:+d.id,mode:d.mode});
+  else if(d.a==="release") act({type:"release",target:+d.id});
+});
+
+async function enemyMenu(t){
+  const u=S.units.find(x=>x.id===sel), d=$("engage"), B=$("engage-body"); let p;
+  try{ p=await api("/api/preview",{state:ST,sig:SIG,unit:u.id,target:t.id}); }catch(e){ return; }
+  if(!p.ok){ flash(FRIENDLY[p.reason]||("Can't engage: "+p.reason)); return; }
+  window._go=a=>{ d.close(); act({...a,unit:u.id,target:t.id}); };
+  B.innerHTML=`<h3>Engage enemy ${t.type} #${t.id} ${"★".repeat(t.rank)}${t.frozen?" ❄ frozen":""}</h3>`
+   +(p.vulnerable?`<p class="good"><b>⚡ This unit is out of supplies.</b> A force attack wins instantly, whatever the numbers.</p>`
+     :`<p>Estimated strength: <b>${p.ratio[0].toFixed(1)}–${p.ratio[1].toFixed(1)}×</b> theirs: <b>${p.verdict}</b><br><span class="small">Intel quality: ${p.intel}. A scout near the target gives a tighter estimate. The attack costs ${p.bullet_cost} bullets and can't be undone.</span></p>`)
+   +`<div class="row"><button class="primary" onclick="_go({type:'attack'})">⚔ Force attack</button>${p.can_capture?`<button onclick="_go({type:'attack',capture:true})">⛓ Attack and capture</button><button onclick="_go({type:'capture_unit'})">⛓ Try to capture</button>`:""}</div>`
+   +`<h4>Bribe (a gamble)</h4><div class="small">Success means the unit joins you or surrenders. Backfire means it becomes a double agent that leaks your mines.</div><div class="row">`+p.bribe.map(b=>`<button onclick="_go({type:'bribe',offer:${b.offer}})">Offer ${b.offer}×<br>💰${b.cost} · about ${b.success}% success · backfire ${b.backfire}</button>`).join("")+`</div>`
+   +`<p><button onclick="this.closest('dialog').close()">Cancel</button></p>`;
+  d.showModal();
 }
-document.getElementById("endturn").onclick=()=>{ mode="move"; act({type:"end_turn"}); };
-const SCN_BLURB={skirmish:"Random map. Capture or destroy the enemy HQ.",supply_run:"Tutorial: hold 2 supply bases by round 14. Walk infantry onto a base and press Capture node.",hold_line:"Survive until round 15 against a brutal commander.",lean_war:"Half food. Cut the enemy's supply roads before yours starve."};
+
+$("endturn").onclick=()=>{ mode="move"; act({type:"end_turn"}); };
+$("codexbtn").onclick=()=>$("codex").showModal();
+$("replaybtn").onclick=()=>{ const b=new Blob([JSON.stringify({game:"war-chess",version:3,...REPLAY},null,1)],{type:"application/json"}), a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ mode="move"; if(S) render(); } });
 async function newGame(){
-  window.startRes=null; sel=null; mode="move"; REPLAY={initial:null,actions:[]};
-  document.getElementById("log").innerHTML=""; localStorage.removeItem(SAVE);
-  const seed=new URLSearchParams(location.search).get("seed")||Math.floor(Math.random()*9999);
-  const sc=document.getElementById("scn").value;
-  const vets = sc!=="skirmish" ? (localStorage.getItem("warchess.vets")||"") : "";
-  apply(await api(`/api/new?difficulty=${document.getElementById("diff").value}&scenario=${sc}&seed=${seed}&vets=${vets}`));
-  if(vets) log("🎖 Veterans from your last victory joined: ranks "+vets);
-  log("🎯 "+SCN_BLURB[sc]);
+  startRes=null; sel=null; mode="move"; REPLAY={initial:null,actions:[]}; $("log").innerHTML=""; localStorage.removeItem(SAVE);
+  const seed=new URLSearchParams(location.search).get("seed")||Math.floor(Math.random()*9999), sc=$("scn").value;
+  const vets=sc!=="skirmish"?(localStorage.getItem("warchess.vets")||""):"";
+  apply(await api(`/api/new?difficulty=${$("diff").value}&scenario=${sc}&seed=${seed}&vets=${vets}`));
+  log("🎯 "+SCN_BLURB[sc]); if(vets) log("🎖 Veterans from your last victory joined you.");
 }
-document.getElementById("newgame").onclick=newGame;
-const WI={clear:"☀",rain:"🌧",storm:"⛈"};
-const OBJ=o=>!o?"Take the enemy HQ":o.type==="survive"?`Survive to round ${o.rounds}`:`Hold ${o.count} supply bases by round ${o.rounds}`;
-
-function extras(){
-  if(!S) return;
-  document.getElementById("top").insertAdjacentHTML("beforeend",`<span class="res">${WI[S.weather]||""} ${S.weather}</span><span class="res" title="Supply bases connected to your HQ by land">🔗 ${S.supplyConnected}/${S.supplyTotal}</span><span class="res">Enemy: ${S.aiPersona}</span><span class="res">🎯 ${OBJ(S.objective)}</span>`);
-  const u=S.units.find(u=>u.id===sel);
-  if(u&&u.type==="transport"){ S.units.filter(k=>k.carrier===u.id).forEach(k=>document.getElementById("actions").insertAdjacentHTML("beforeend",`<br><button onclick="unloadId=${k.id};setMode('unload')">🏖 Unload #${k.id} (${k.type})</button>`)); }
-  if(u&&["infantry","engineer","scout"].includes(u.type)){ const tr=S.units.find(k=>k.owner==="player"&&k.type==="transport"&&Math.max(Math.abs(k.pos[0]-u.pos[0]),Math.abs(k.pos[1]-u.pos[1]))<=1);
-    if(tr) document.getElementById("actions").insertAdjacentHTML("beforeend",`<br><button onclick="act({type:'load',unit:${u.id},target:${tr.id}})">🚢 Board transport #${tr.id}</button>`); }
-  if(u&&u.type==="engineer") document.getElementById("actions").insertAdjacentHTML("beforeend",`<br><button onclick="setMode('defuse')">🔧 Defuse tile</button>`);
-}
-
-const _hud=hud; hud=function(){ _hud(); extras(); };
-document.getElementById("codexbtn").onclick=()=>document.getElementById("codex").showModal();
-document.getElementById("replaybtn").onclick=()=>{
-  const b=new Blob([JSON.stringify({game:"war-chess",version:2,...REPLAY},null,1)],{type:"application/json"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click();
-};
-
+$("newgame").onclick=newGame;
 window.addEventListener("error",e=>{ try{ navigator.sendBeacon("/api/log",new Blob([JSON.stringify({msg:String(e.message).slice(0,480),where:(e.filename||"")+":"+e.lineno})],{type:"application/json"})); }catch(_){} });
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 (async()=>{
   try{ const sv=JSON.parse(localStorage.getItem(SAVE)||"null");
-    if(sv&&sv.state){ window.startRes=sv.start||null; REPLAY=sv.replay||{initial:null,actions:[]}; apply(await api("/api/load",{state:sv.state,sig:sv.sig})); log("💾 Resumed saved game"); return; } }catch(e){ localStorage.removeItem(SAVE); log("Old or corrupt save discarded."); }
+    if(sv&&sv.state&&sv.sig){ startRes=sv.start||null; REPLAY=sv.replay||REPLAY; apply(await api("/api/load",{state:sv.state,sig:sv.sig})); log("💾 Resumed your saved game"); return; } }
+  catch(e){ localStorage.removeItem(SAVE); }
   await newGame();
 })();
-
-// Contoh fungsi untuk memperbarui tampilan HUD di layar (Frontend)
-function updateGameHUD(snapshot) {
-    // 1. Update Indikator Giliran (Your Turn vs Enemy Turn)
-    const turnIndicator = document.getElementById("turn-indicator"); // Sesuaikan ID elemen di HTML kamu
-    if (turnIndicator) {
-        if (snapshot.active === "player") {
-            turnIndicator.innerText = "🎮 YOUR TURN";
-            turnIndicator.style.color = "#2ecc71"; // Hijau
-        } else {
-            turnIndicator.innerText = "🤖 ENEMY TURN (AI)";
-            turnIndicator.style.color = "#e74c3c"; // Merah
-        }
-    }
-
-    // 2. Update Nomor Round
-    const roundElement = document.getElementById("round-counter"); // Sesuaikan ID elemen di HTML kamu
-    if (roundElement) {
-        roundElement.innerText = `Round: ${snapshot.round}`;
-    }
-
-    // 3. Update Payday Countdown
-    const paydayElement = document.getElementById("payday-counter"); // Sesuaikan ID elemen di HTML kamu
-    if (paydayElement) {
-        paydayElement.innerText = `Payday in: ${snapshot.paydayIn} turns`;
-    }
-
-    // 4. Disable tombol End Turn jika sedang giliran AI
-    const endTurnBtn = document.getElementById("end-turn-btn");
-    if (endTurnBtn) {
-        if (snapshot.active === "ai") {
-            endTurnBtn.disabled = true;
-            endTurnBtn.innerText = "AI Thinking...";
-        } else {
-            endTurnBtn.disabled = false;
-            endTurnBtn.innerText = "End Turn";
-        }
-    }
-}
-
 </script>
-<dialog id="codex"><h3>📖 Field Manual</h3>
-<h5>Terrain burns resources</h5>Plains burn Food (little), Forest burns Food (lots), Urban burns Materials (tanks cannot enter), Mud burns Fuel, Sea burns Money (only ships and transports).
-<h5>Weather</h5>Changes every 3 rounds. Rain makes plains, mud and forest burn more; storms make sea trips and mud costly. Check the HUD before a flank.
-<h5>Payday &amp; supply lines</h5>Every 5 rounds. Only supply bases <b>connected to your HQ by land</b> count (🔗 in the HUD). Enemy units, and the tiles next to them, cut the road. Low morale caps the bonus (nothing below 30) and shrinks income.
-<h5>Bankruptcy</h5>When a unit's lifeline resource hits 0 it freezes. Any enemy with resources &gt; 0 beats a frozen unit instantly, ignoring rank and force.
-<h5>Force vs money</h5>Force compares Force Numbers (rank, hp, terrain, morale, ±15%). Bribes roll SSR defection / SR surrender / R resisted / SSR backfire (a double agent that leaks your mines). Higher offers help; frozen targets are cheap.
-<h5>Mines &amp; engineers</h5>A planted bomb is hidden and kills EVERYONE on its tile when you detonate it, including your own units (extra morale loss). Engineers defuse adjacent mines, and probing an empty tile is free.
-<h5>Veterancy</h5>Every 2nd kill promotes a unit (max rank 5).
-<h5>Morale</h5>Falls with losses, force interrogation (−8) and friendly-fire. Rises with live captures, subversion and capturing nodes with infantry.
-<h5>Fog of war</h5>You only see tiles near your units and buildings (dark = unseen). Enemies in forest or urban tiles are hidden unless within 2 tiles. <b>Scouts</b> see 6 tiles. You cannot attack or bribe what you cannot see.
-<h5>Naval pincer</h5>A transport carries 2 infantry/engineers/scouts. Walk next to it, press Board, sail, then Unload onto an adjacent land tile. If the transport dies, so does its cargo.
-<h5>Consequences</h5>Wounded units heal slowly beside your own HQ, bases and barracks (if fed). Destroyed walls leave rubble (cover, no tanks). Veterans from a won campaign mission join the next one. <b>There is no undo.</b>
-<h5>Intel is fuzzy</h5>Engagement odds are estimates. A scout near the target sharpens them.
-<h5>Enemy commanders</h5><b>Balanced</b>, <b>Banker</b> (bribes a lot), <b>Brute</b> (force-interrogates prisoners) or <b>Flanker</b> (lands troops from the sea).
-<p><button onclick="document.getElementById('codex').close()">Close</button></p></dialog>
-<dialog id="engage"><div id="engage-body"></div></dialog>
 </body>
 </html>

@@ -120,6 +120,8 @@ def action(a: Action):
         return _view(s, C.Outcome(False, "not_your_turn"))
     t, pos, r = a.type, ((a.x, a.y) if a.x is not None and a.y is not None else None), None
     needs_pos = {"move", "bomb", "detonate", "build", "defuse", "unload"}
+    if t not in ("end_turn", "interrogate", "release") and s.actions_left(ME) <= 0:
+        return _view(s, C.Outcome(False, "no_actions_left"))
     try:
         if t in needs_pos and pos is None:
             raise ValueError("x,y required")

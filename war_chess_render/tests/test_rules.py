@@ -120,7 +120,7 @@ def test_veterancy_promotes_every_second_kill():
     for _ in range(40):                                     # retry across rng variance
         if victim.id not in s.units: break
         C.resolve_force_attack(s, u.id, victim.id)
-        s.active = Side.PLAYER
+        s.active = Side.PLAYER; s.actions_used[Side.PLAYER] = 0
     assert u.id not in s.units or u.rank >= 2
 
 
@@ -254,3 +254,66 @@ def test_hq_conscripts_when_army_is_gone_and_weariness_grows():
     assert sum(u.type is UnitType.INFANTRY for u in s.units_of(Side.PLAYER)) == 1
     base = s.consumption_mult(Side.PLAYER); s.round = 80
     assert s.consumption_mult(Side.PLAYER) == pytest.approx(base * 1.6)
+
+
+def test_five_actions_per_turn_for_everyone_then_reset():
+    s = game(); inf = [u for u in s.units_of(Side.PLAYER) if u.type is UnitType.INFANTRY]
+    done = 0
+    for i in range(8):
+        u = inf[i % len(inf)]
+        step = next((n for n in s.neighbors8(u.pos) if s.can_enter(u, n)), None)
+        done += s.move_unit(u.id, [step])["moved"] > 0
+    assert done == MAX_ACTIONS and s.actions_left(Side.PLAYER) == 0
+    assert s.move_unit(inf[0].id, [next(n for n in s.neighbors8(inf[0].pos) if s.can_enter(inf[0], n))])["stopped"] == "no_actions_left"
+    s.end_turn(); assert s.actions_left(Side.AI) == MAX_ACTIONS
+    ai.play_turn(s, Side.AI)                       # AI is capped too
+    assert s.actions_used[Side.AI] == 0 or s.actions_used[Side.AI] <= MAX_ACTIONS
+
+
+def test_all_action_types_cost_one_and_are_blocked_at_zero():
+    s = game(); u = s.units_of(Side.PLAYER)[0]
+    s.actions_used[Side.PLAYER] = MAX_ACTIONS
+    assert C.plant_mine(s, u.id).kind == "no_actions_left"
+    assert not s.build(u.id, BuildingType.WALL, next(n for n in s.neighbors8(u.pos) if s.in_bounds(n)))
+    s.actions_used[Side.PLAYER] = MAX_ACTIONS - 1
+    assert C.plant_mine(s, u.id).ok and s.actions_left(Side.PLAYER) == 0
+
+
+def test_payday_fires_on_round_5_and_counter_matches():
+    s = game(); seen = []
+    for _ in range(12):
+        s.end_turn(); s.end_turn()
+        seen.append(s.snapshot(Side.PLAYER)["paydayIn"])
+    assert [e["round"] for e in s.events if e["type"] == "payday" and e["side"] == "player"][:2] == [5, 10]
+    assert seen[:5] == [3, 2, 1, 5, 4]
+
+
+def test_snapshot_reports_moves_left():
+    s = game(); snap = s.snapshot(Side.PLAYER)
+    assert snap["actionsLeft"] == MAX_ACTIONS == snap["maxActions"]
+
+
+def _only_infantry(s, n=4):
+    for u in list(s.units.values()): s.units.pop(u.id)
+    hq = next(b.pos for b in s.buildings.values() if b.type is BuildingType.HQ and b.owner is Side.PLAYER)
+    for i in range(n): s.spawn_unit(Side.PLAYER, UnitType.INFANTRY, (hq[0] + 1, hq[1] - 2 + i))
+
+
+def test_forecast_matches_what_the_engine_really_does():
+    for food, start_round in ((10, 1), (5, 3), (30, 1), (14, 2), (40, 7)):
+        s = game(); _only_infantry(s); s.round = start_round
+        s.factions[Side.PLAYER].res[Res.FOOD] = food
+        predicted = s.forecast(Side.PLAYER)["food"]["runs_out_in"]
+        real = None
+        for t in range(1, 41):
+            s.end_turn(); s.end_turn()
+            if s.factions[Side.PLAYER].res[Res.FOOD] <= 1e-9:
+                real = t; break
+        assert predicted == real, (food, start_round, predicted, real)
+
+
+def test_forecast_no_payday_is_worst_case_and_snapshot_has_it():
+    s = game(); _only_infantry(s); s.round = 3; s.factions[Side.PLAYER].res[Res.FOOD] = 5
+    f = s.forecast(Side.PLAYER)["food"]
+    assert f["runs_out_no_payday"] == 2 and (f["runs_out_in"] is None or f["runs_out_in"] > 2)
+    assert "food" in s.snapshot(Side.PLAYER)["forecast"]

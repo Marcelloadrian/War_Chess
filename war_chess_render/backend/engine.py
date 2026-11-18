@@ -119,6 +119,7 @@ WEATHER_MULT: dict[tuple[Weather, Terrain], float] = {
 SAVE_VERSION = 3
 CARGO_CAP = 2
 HEAL_PER_ROUND = 8
+MAX_ACTIONS = 5               # actions per side per turn (move/attack/build/plant/...)
 WEARINESS_START = 60          # after this round every burn/upkeep grows 3% per round
 WEARINESS_RATE = 0.03
 HQ_CONSCRIPT_BELOW = 4        # HQ drafts 1 infantry per payday while you field fewer than this
@@ -290,6 +291,7 @@ class GameState:
         self.objective: Optional[dict] = None     # scenario objective
         self.scenario = "skirmish"
         self.persona = {Side.PLAYER: "balanced", Side.AI: "balanced"}
+        self.actions_used = {Side.PLAYER: 0, Side.AI: 0}
         self.units: dict[int, Unit] = {}
         self.prisoners: dict[int, tuple[Unit, Side]] = {}    # id -> (unit, captor)
         self.buildings: dict[Coord, Building] = {}
@@ -297,7 +299,6 @@ class GameState:
         self.events: list[dict] = []
         self.round_hooks: list[Callable[["GameState"], None]] = []
         self._next_id = 1
-        self.moves_made = {Side.PLAYER: 0, Side.AI: 0}
 
         p_mult, a_mult = DIFFICULTY_START[difficulty]
         self.factions = {
@@ -436,22 +437,14 @@ class GameState:
         u = self.units[unit_id]
         if self.winner or u.owner is not self.active:
             return {"moved": 0, "stopped": "not_your_turn"}
-            
-        # CEK BATASAN 5 KALI MOVE MAKSIMAL PER GILIRAN
-        if self.moves_made.get(u.owner, 0) >= 5:
-            return {"moved": 0, "stopped": "max_moves_reached"}
-            
         if u.frozen:
             return {"moved": 0, "stopped": "frozen"}
         if u.carrier is not None:
             return {"moved": 0, "stopped": "embarked"}
-            
+        if self.actions_left(u.owner) <= 0:
+            return {"moved": 0, "stopped": "no_actions_left"}
         mp_left, moved, stopped = u.spec.mp, 0, None
         for c in path:
-            # Pastikan juga total akumulasi move tidak melebihi batas 5 di tengah path
-            if self.moves_made.get(u.owner, 0) >= 5:
-                stopped = "max_moves_reached"; break
-                
             if max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) != 1:
                 stopped = "not_adjacent"; break
             if not self.can_enter(u, c):
@@ -461,19 +454,15 @@ class GameState:
                 stopped = "out_of_mp"; break
             if not self.spend(u.owner, burn):
                 stopped = "cannot_afford"; break
-                
             mp_left -= mp
             self.emit("unit_moved", unit=u.id, src=u.pos, dst=c, burn=_ser(burn))
             u.pos = c
-            
-            # Tambah counter pergerakan player/AI
-            self.moves_made[u.owner] = self.moves_made.get(u.owner, 0) + 1
-            
             for k in self.units.values():          # cargo travels with its transport
                 if k.carrier == u.id:
                     k.pos = c
             moved += 1
-            
+        if moved:
+            self.use_action(u.owner)
         self.evaluate_bankruptcy(u.owner)
         return {"moved": moved, "stopped": stopped}
 
@@ -496,24 +485,28 @@ class GameState:
         u, t = self.units.get(unit_id), self.units.get(transport_id)
         if not u or not t or t.type is not UnitType.TRANSPORT or u.owner is not t.owner:
             return False
-        if u.owner is not self.active or u.carrier is not None or u.frozen or t.frozen:
+        if (u.owner is not self.active or u.carrier is not None or u.frozen or t.frozen
+                or self.actions_left(u.owner) <= 0):
             return False
         if u.spec.cls is not UnitClass.FOOT or max(abs(u.pos[0] - t.pos[0]), abs(u.pos[1] - t.pos[1])) > 1:
             return False
         if sum(1 for k in self.units.values() if k.carrier == t.id) >= CARGO_CAP:
             return False
         u.carrier, u.pos = t.id, t.pos
+        self.use_action(u.owner)
         self.emit("unit_loaded", unit=u.id, carrier=t.id)
         return True
 
     def unload_unit(self, unit_id: int, c: Coord) -> bool:
         u = self.units.get(unit_id)
         t = self.units.get(u.carrier) if u and u.carrier is not None else None
-        if not t or t.owner is not self.active or t.frozen or not self.in_bounds(c):
+        if (not t or t.owner is not self.active or t.frozen or not self.in_bounds(c)
+                or self.actions_left(t.owner) <= 0):
             return False
         if max(abs(c[0] - t.pos[0]), abs(c[1] - t.pos[1])) != 1 or not self.can_enter(u, c):
             return False
         u.carrier, u.pos = None, c
+        self.use_action(u.owner)
         self.emit("unit_unloaded", unit=u.id, pos=c)
         return True
 
@@ -552,6 +545,12 @@ class GameState:
                    for b in self.buildings.values()):
                 u.hp = min(u.spec.hp, u.hp + HEAL_PER_ROUND)
 
+    def actions_left(self, side: Side) -> int:
+        return MAX_ACTIONS - self.actions_used[side]
+
+    def use_action(self, side: Side) -> None:
+        self.actions_used[side] += 1
+
     def is_solvent(self, side: Side) -> bool:
         """'Enemy with greater than zero resources' - the attacker side check."""
         return self.factions[side].total_solvency() > 1e-9
@@ -573,7 +572,7 @@ class GameState:
     # ---- construction & capture ------------------------------------------ #
     def build(self, unit_id: int, btype: BuildingType, c: Coord) -> bool:
         u = self.units[unit_id]
-        if u.owner is not self.active or u.frozen:
+        if u.owner is not self.active or u.frozen or self.actions_left(u.owner) <= 0:
             return False
         if max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) > 1:
             return False
@@ -583,6 +582,7 @@ class GameState:
         if not self.spend(u.owner, BUILD_COST[btype]):
             return False
         self.buildings[c] = Building(btype, u.owner, c, BUILD_TURNS[btype])
+        self.use_action(u.owner)
         self.emit("build_started", pos=c, btype=btype.value, turns=BUILD_TURNS[btype])
         return True
 
@@ -590,12 +590,14 @@ class GameState:
         """Only infantry capture territory (redemption mechanic)."""
         u = self.units[unit_id]
         b = self.buildings.get(c)
-        if not b or u.type is not UnitType.INFANTRY or b.owner is u.owner or u.frozen:
+        if not b or u.type is not UnitType.INFANTRY or b.owner is u.owner or u.frozen \
+                or self.actions_left(u.owner) <= 0:
             return False
         if u.pos != c:       # must stand on the node
             return False
         prev = b.owner
         b.owner = u.owner
+        self.use_action(u.owner)
         self.apply_moral(u.owner, "TERRITORY_CAPTURE")
         self.emit("building_captured", pos=c, btype=b.type.value, owner=u.owner.value)
         for s in (u.owner, prev):
@@ -608,7 +610,7 @@ class GameState:
     def end_turn(self) -> None:
         if self.winner:
             return
-        self.moves_made[self.active] = 0  # Reset counter giliran ini
+        self.actions_used = {Side.PLAYER: 0, Side.AI: 0}      # fresh budget for whoever moves next
         if self.active is Side.PLAYER:
             self.active = Side.AI
             self.emit("turn_changed", active=self.active.value)
@@ -683,6 +685,36 @@ class GameState:
                 self.spend(side, {Res.FOOD: BARRACKS_RECRUIT_FOOD})
                 self.spawn_unit(side, UnitType.INFANTRY, spot)
 
+    def forecast(self, side: Side, horizon: int = 40) -> dict:
+        """Upkeep runway per resource, assuming the army stands still (terrain burn is extra).
+        Mirrors begin_round exactly: round+1 -> upkeep (clamped at 0) -> payday (if round % 5 == 0).
+        runs_out_in = number of further End turns until the stock is 0 after payday (None = beyond horizon)."""
+        per: dict = {}
+        for u in self.units_of(side):
+            for r, amt in u.spec.upkeep.items():
+                per[r] = per.get(r, 0.0) + amt
+        moral_cm = lerp_table(CONSUMPTION_MULT_TABLE, self.factions[side].moral)
+        supply = min(1.0 + SUPPLY_BASE_BONUS * len(self.connected_supply_bases(side)), self.supply_cap(side))
+        ship = {r: amt * supply * self.income_mult(side) for r, amt in PAYDAY_BASE.items()}
+        out = {}
+        for r, amt in per.items():
+            stock = nopay = self.factions[side].res[r]
+            hit = hit_nopay = None
+            for t in range(1, horizon + 1):
+                rnd = self.round + t
+                need = amt * moral_cm * (1 + WEARINESS_RATE * max(0, rnd - WEARINESS_START))
+                stock, nopay = max(0.0, stock - need), max(0.0, nopay - need)
+                if rnd % PAYDAY_INTERVAL == 0:
+                    stock += ship[r]
+                if hit is None and stock <= 1e-9:
+                    hit = t
+                if hit_nopay is None and nopay <= 1e-9:
+                    hit_nopay = t
+            out[r.value] = {"stock": round(self.factions[side].res[r], 1), "upkeep": round(amt * moral_cm, 2),
+                            "runs_out_in": hit, "runs_out_no_payday": hit_nopay,
+                            "payday_amount": round(ship[r], 1)}
+        return out
+
     def connected_supply_bases(self, side: Side) -> list[Coord]:
         """Supply bases reachable from own HQ over land. Enemy units and the tiles
         next to them (zone of control), plus enemy buildings, cut the road."""
@@ -753,7 +785,6 @@ class GameState:
             "winner": self.winner.value if self.winner else None,
             "difficulty": self.difficulty.value,
             "paydayIn": PAYDAY_INTERVAL - (self.round % PAYDAY_INTERVAL),
-            "movesLeft": max(0, 5 - self.moves_made.get(viewer, 0)), # <--- Ditambahkan di sini
             "grid": [[t.value for t in row] for row in self.grid],
             "units": [{"id": u.id, "owner": u.owner.value, "type": u.type.value,
                        "pos": u.pos, "rank": u.rank, "hp": u.hp, "frozen": u.frozen, "kills": u.kills, "carrier": u.carrier}
@@ -774,9 +805,12 @@ class GameState:
             "visible": [list(c) for c in self.visible_tiles(viewer)],
             "weather": self.weather.value, "objective": self.objective, "scenario": self.scenario,
             "aiPersona": self.persona[viewer.other],
+            "actionsLeft": self.actions_left(viewer), "maxActions": MAX_ACTIONS,
+            "forecast": self.forecast(viewer),
             "supplyConnected": len(self.connected_supply_bases(viewer)),
             "supplyTotal": self.count_buildings(viewer, BuildingType.SUPPLY_BASE),
         }
+
 
 def _ser(d: dict) -> dict:
     return {(k.value if isinstance(k, Enum) else k): round(v, 2) for k, v in d.items()}
@@ -805,6 +839,7 @@ def dump_state(s: GameState) -> dict:
     return {
         "v": SAVE_VERSION, "weather": s.weather.value, "objective": s.objective, "scenario": s.scenario,
         "persona": {k.value: v for k, v in s.persona.items()},
+        "au": {k.value: v for k, v in s.actions_used.items()},
         "grid": [[t.value for t in r] for r in s.grid], "difficulty": s.difficulty.value,
         "round": s.round, "active": s.active.value, "winner": s.winner.value if s.winner else None,
         "next_id": s._next_id, "rng": [v, list(internal), gauss],
@@ -830,6 +865,7 @@ def load_state(d: dict) -> GameState:
     s._next_id = d["next_id"]
     s.weather, s.objective, s.scenario = Weather(d["weather"]), d["objective"], d["scenario"]
     s.persona = {Side(k): v for k, v in d["persona"].items()}
+    s.actions_used = {Side(k): v for k, v in d.get("au", {"player": 0, "ai": 0}).items()}
     v, internal, gauss = d["rng"]
     s.rng.setstate((v, tuple(internal), gauss))
     s.units = {u["id"]: _uload(u) for u in d["units"]}

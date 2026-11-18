@@ -7,6 +7,7 @@ Depends only on engine.py. All randomness uses state.rng.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import wraps
 from enum import Enum
 from typing import Optional
 
@@ -25,6 +26,20 @@ class Outcome:
 
 def _cheb(a: Coord, b: Coord) -> int:
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def actioned(fn):
+    """Every battlefield action costs 1 of the side's MAX_ACTIONS per turn (player and AI alike)."""
+    @wraps(fn)
+    def wrapper(state, *args, **kwargs):
+        side = state.active
+        if state.actions_left(side) <= 0:
+            return Outcome(False, "no_actions_left")
+        out = fn(state, *args, **kwargs)
+        if out.ok:
+            state.use_action(side)
+        return out
+    return wrapper
 
 
 # =========================================================================== #
@@ -55,6 +70,7 @@ def _validate_attack(state: GameState, a: Unit, d: Unit) -> Optional[str]:
     return None
 
 
+@actioned
 def resolve_force_attack(state: GameState, attacker_id: int, defender_id: int,
                          capture_if_vulnerable: bool = False) -> Outcome:
     a, d = state.units[attacker_id], state.units[defender_id]
@@ -109,6 +125,7 @@ def resolve_force_attack(state: GameState, attacker_id: int, defender_id: int,
     return Outcome(True, outcome, {"fa": fa, "fd": fd})
 
 
+@actioned
 def drop_bomb(state: GameState, side: Side, target: Coord) -> Outcome:
     """Normal bomb: active-turn AoE (radius 1). Destroys walls; terrain cover
     (forest/urban) reduces unit damage. Hits friendlies too if they are there."""
@@ -146,6 +163,7 @@ def _take_prisoner(state: GameState, captor: Side, u: Unit) -> None:
     state.emit("unit_captured", unit=u.id, captor=captor.value, pos=u.pos)
 
 
+@actioned
 def try_single_capture(state: GameState, attacker_id: int, target_id: int) -> Outcome:
     """Single-unit capture: needs a Force threshold (>=1.6x) and target wounded
     (<=60% hp) - capture is an alternative to killing, not a free action."""
@@ -180,6 +198,7 @@ def is_surrounded(state: GameState, u: Unit) -> bool:
     return enemies >= 2
 
 
+@actioned
 def capture_surrounded(state: GameState, side: Side) -> Outcome:
     """Capture ALL enemy infantry currently surrounded. Other classes are
     destroyed (cannot be held as prisoners)."""
@@ -287,6 +306,7 @@ def gacha_odds(state: GameState, buyer: Side, target: Unit, offer_mult: float) -
     return {t: v / total for t, v in w.items()}
 
 
+@actioned
 def gacha_bribe(state: GameState, buyer: Side, target_id: int,
                 offer_mult: float = 1.0, roll: Optional[float] = None) -> Outcome:
     """`roll` lets tests inject a deterministic number in [0,1)."""
@@ -357,6 +377,7 @@ def install(state: GameState) -> None:
 # =========================================================================== #
 # 5. PLANTED BOMBS (remote mines) - INDISCRIMINATE FRIENDLY FIRE
 # =========================================================================== #
+@actioned
 def plant_mine(state: GameState, unit_id: int) -> Outcome:
     """Unit spends its turn planting a hidden bomb on its own tile."""
     u = state.units[unit_id]
@@ -371,6 +392,7 @@ def plant_mine(state: GameState, unit_id: int) -> Outcome:
     return Outcome(True, "planted", {"pos": u.pos})
 
 
+@actioned
 def detonate_mine(state: GameState, side: Side, pos: Coord) -> Outcome:
     """Owner-triggered. Kills EVERY unit on the tile - friend or foe.
     Friendly deaths cost extra moral on top of the normal unit-loss penalty."""
@@ -396,6 +418,7 @@ def detonate_mine(state: GameState, side: Side, pos: Coord) -> Outcome:
 # =========================================================================== #
 # 6. ENGINEER: mine counter-play
 # =========================================================================== #
+@actioned
 def defuse_mine(state: GameState, unit_id: int, pos: Coord) -> Outcome:
     """Engineers probe an adjacent tile and defuse whatever mine is there (any owner).
     Probing an empty tile is free, so engineers can sweep suspicious chokepoints."""

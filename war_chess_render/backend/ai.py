@@ -145,7 +145,12 @@ def play_turn(state: GameState, me: Side) -> None:
     lane: set = set()
     if my_hq and foe_hq:
         lane = set(find_path(state, Unit(-1, me, UnitType.INFANTRY, foe_hq), my_hq))
-    for u in list(state.units_of(me)):
+    vf = _visible_foes(state, me)          # with only 5 actions, units that can fight act first
+    order = sorted(state.units_of(me), key=lambda u: (not any(_dist(t.pos, u.pos) <= u.spec.attack_range for t in vf),
+                                                      _dist(u.pos, foe_hq) if foe_hq else 0))
+    for u in order:
+        if state.actions_left(me) <= 0:
+            break
         if state.winner or u.id not in state.units or u.frozen or u.carrier is not None or u.id in used:
             continue
         foes = _visible_foes(state, me)
