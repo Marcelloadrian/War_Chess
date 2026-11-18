@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: war-chess
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.index:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/new
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: WARCHESS_SECRET
+        generateValue: true
