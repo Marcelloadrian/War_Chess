@@ -27,7 +27,7 @@ def build(scenario_id: str, difficulty: str, seed: int, vets: tuple = ()) -> Gam
     sc = SCENARIOS[scenario_id]                      # KeyError -> 400 in the server
     diff = Difficulty(sc.get("difficulty") or difficulty)
     seed = sc.get("seed", seed) % 1_000_000
-    s = mapgen.generate(32, 20, diff, seed)
+    s = mapgen.generate(50, 50, diff, seed)
     s.scenario, s.objective = scenario_id, sc.get("objective")
     s.persona[Side.AI] = sc.get("persona", PERSONA_CYCLE[seed % 3])
     for res, mult in sc.get("player_mult", {}).items():

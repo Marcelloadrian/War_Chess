@@ -31,6 +31,8 @@ header select,header button{background:#2b3a4a;color:#fff;border-color:#3d4f63}
 #toasts{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:5;pointer-events:none;width:max-content;max-width:90%}
 .toast{padding:8px 14px;border-radius:10px;color:#fff;font-weight:600;box-shadow:0 4px 14px #0005;animation:tin .18s ease-out}
 .toast.bad{background:#a52a20}.toast.warn{background:#9a6a10}.toast.good{background:#237a4b}
+#cv{touch-action:none;cursor:grab;display:block;border-radius:8px}#cv:active{cursor:grabbing}
+#camctl{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:4}#camctl button{width:38px;height:38px;font-size:17px;padding:0}
 @keyframes tin{from{opacity:0;transform:translateY(-8px)}}
 @media(prefers-reduced-motion:reduce){.toast{animation:none}}
 canvas{display:block;width:100%;height:auto;border-radius:8px;cursor:pointer;background:#9aa89a}
@@ -47,6 +49,8 @@ aside{display:flex;flex-direction:column;gap:10px}
 #log{max-height:200px;overflow:auto;font-size:13px;line-height:1.5} #log div{border-bottom:1px solid #e1e5df;padding:2px 0}
 dialog{background:var(--card);color:var(--ink);border:2px solid var(--ink);border-radius:14px;max-width:560px;width:92vw;max-height:84vh;overflow:auto}
 dialog table{border-collapse:collapse;width:100%;font-size:13px;margin:4px 0} dialog th,dialog td{border-bottom:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top} dialog th{color:var(--mut)}
+#rbar{display:none;background:#fff7d6;border:2px solid var(--gold);border-radius:12px;padding:10px 14px;gap:8px 12px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+#rtxt{flex:1 1 100%;font-weight:600}
 dialog::backdrop{background:#0008} dialog h3{margin-top:0} dialog h4{margin:14px 0 4px}
 dialog .row button{flex:1 1 40%} button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
 button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{display:none;border-color:var(--bad);color:var(--bad);font-weight:600}
@@ -58,7 +62,7 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
   <h1>War Chess</h1>
   <select id="diff" title="Difficulty"><option>easy</option><option selected>medium</option><option>hard</option></select>
   <select id="scn" title="Mission"><option value="skirmish">Skirmish (random map)</option><option value="supply_run">1. Supply Run (tutorial)</option><option value="hold_line">2. Hold the Line</option><option value="lean_war">3. Lean War</option></select>
-  <button id="newgame">New game</button><button id="codexbtn">How to play</button><button id="manualbtn">📖 Field Manual</button><button id="sndbtn" title="Sound alerts for failures"></button><button id="replaybtn">Save replay</button>
+  <button id="newgame">New game</button><button id="codexbtn">How to play</button><button id="manualbtn">📖 Field Manual</button><button id="sndbtn" title="Sound alerts for failures"></button><button id="replaybtn">Save replay</button><button id="playbtn">▶ Play replay</button>
   <div id="chips"></div>
 </header>
 <div id="app">
@@ -68,7 +72,9 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
       <div id="pips" aria-label="Moves left"></div><div id="pipstxt"></div>
       <button id="nextunit" title="Select the next unit that can still act (N)">Next unit (N)</button><button id="cancel">Cancel (Esc)</button><button id="endturn">End turn</button>
     </div>
-    <div id="boardbox"><div id="toasts" role="status" aria-live="polite"></div><canvas id="cv" tabindex="0" aria-label="Game map"></canvas></div>
+    <div id="rbar"><div id="rtxt"></div><button id="rfirst" title="Back to the start">⏮ Start</button><button id="rback">◀ Back</button><button id="rplay" class="primary">▶ Play</button><button id="rnext">Next ▶</button><select id="rspeed" title="Playback speed"><option value="1800">Slow</option><option value="900" selected>Normal</option><option value="400">Fast</option></select><button id="rexit">Exit replay</button></div>
+    <div id="boardbox"><div id="toasts" role="status" aria-live="polite"></div><canvas id="cv" tabindex="0" aria-label="Game map"></canvas>
+      <div id="camctl"><button id="zin" title="Zoom in (mouse wheel)">＋</button><button id="zout" title="Zoom out">－</button><button id="zhome" title="Centre on your HQ">⌂</button><button id="zfit" title="Show the whole map">⛶</button></div></div>
     <div id="info">Hover a tile for details.</div>
     <div id="legend">
       <span><b style="border-color:#2f6fe4"></b>your building</span><span><b style="border-color:#d64541"></b>enemy building</span><span><b style="border-color:#fff;background:#fff3"></b>neutral (capture it)</span>
@@ -130,23 +136,32 @@ Every round you also get a small trickle of every resource (scaled by morale, ne
 Strength = base × rank (+15% per rank) × health × morale × the defender's terrain (forest +25%, ruins +50%), each side randomly ±15%. Attacker at 1.0× or more wins, 0.7 to 1.0× is repelled with damage on both sides, under 0.7× the attacker is destroyed. Every 2nd kill promotes a unit (max rank 5). Each attack costs bullets. The engage screen shows only an estimate; a scout within 5 tiles sharpens it.
 <h4>Capture, bribes, prisoners</h4>
 Single capture: infantry only, at least 1.6× strength and the target at 60% HP or less. Surround: every open tile around an enemy is blocked and at least 2 enemies are adjacent; infantry are captured, other units destroyed. Bribe cost is 20 × rank × offer (1 to 3×). The odds compare your morale with the target side's: equal is neutral, 50 points ahead gives about ×1.5 success, 50 behind about ×0.5, and backfires get rarer the further ahead you are. Outcomes are defect, surrender, resisted or backfire (a double agent that leaks your mines and flips back after 3 rounds). Interrogating: question (costs money, prisoner lives, shows about half of enemy mines) or force (prisoner dies, shows all mines, −8 morale).
+<h4>Outposts and attrition</h4>
+Units more than 8 tiles from every finished HQ, Supply Base or Barracks do not freeze, but they cost 2.5× upkeep. A deep push without outposts bleeds your stock, so build bases as you advance. The goal card warns you when units are out of range. Buildings can never be built on water, even on ice.
 <h4>Mines, boats, fog, weather</h4>
-A mine costs 1 bomb and 2 materials and kills every unit on its tile when you detonate it, even yours. Engineers defuse mines on an adjacent tile. Transports carry 2 foot units: board when adjacent, unload onto an adjacent land tile. You see 3 tiles around units (scouts 6, HQ 4); enemies in forest or ruins are hidden beyond 2 tiles. Weather is re-rolled every 3 rounds (55% clear, 30% rain, 15% storm).
+A mine costs 1 bomb and 2 materials and kills every unit on its tile when you detonate it, even yours. Engineers defuse mines on an adjacent tile. Transports carry 2 foot units: board when adjacent, unload onto an adjacent land tile. You see 3 tiles around units (scouts 6, HQ 4); enemies in forest or ruins are hidden beyond 2 tiles. Weather is re-rolled every 3 rounds (50% clear, 25% rain, 10% storm, 15% freeze). Rain turns plains into mud (slow, burns fuel). A freeze turns sea into ice that land units can walk across, but when the weather changes the ice melts and every land unit still standing on it drowns.
 <h4>Turns</h4>
 5 moves per turn for you and the enemy. Interrogating, releasing and ending the turn are free.
 <p><button class="primary" onclick="this.closest('dialog').close()">Close</button></p></dialog>
 
+<dialog id="replaydlg"><h3>Play replay</h3><div class="small">A replay re-runs every action from the start of the game, showing what you saw (fog included). Your current game is not touched.</div>
+<div class="row"><button id="rcur" class="primary">Watch this game so far</button><button id="rload">Open a replay file…</button></div>
+<p><button onclick="this.closest('dialog').close()">Cancel</button></p></dialog>
+<dialog id="enddlg"><h2 id="endt"></h2><div id="endb" class="small"></div>
+<p><button class="primary" id="endnew">New game</button> <button id="endrep">Save replay</button> <button id="endwatch">Watch replay</button> <button onclick="this.closest('dialog').close()">Close</button></p></dialog>
+<input type="file" id="rfile" accept=".json,application/json" hidden>
 <script>
 const T=30, SAVE="warchess.save.v1", $=id=>document.getElementById(id);
-const COL={plains:"#8fa77a",forest:"#5d8a5c",urban:"#9a8b7c",mud:"#8b7a55",sea:"#5b8fb9"};
-const GLYPH={forest:"🌲",urban:"▦",mud:"≈",sea:"⚓"};
+const cam={x:0,y:0,z:.9,on:false}, PAN={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}; let endShown=false;
+const COL={plains:"#8fa77a",forest:"#5d8a5c",urban:"#9a8b7c",mud:"#8b7a55",sea:"#5b8fb9",ice:"#c4e6f0"};
+const GLYPH={forest:"🌲",urban:"▦",mud:"≈",sea:"⚓",ice:"❄"};
 const RES=[["money","💰","Money","Bribes, building, sea travel"],["food","🌾","Food","Every unit eats 1 per round; forests burn extra"],["bullets","🔫","Bullets","Spent on each attack"],["bombs","💣","Bombs","Bomb strikes and mines"],["materials","🧱","Materials","Building; ruins burn them"],["fuel","⛽","Fuel","Mud, vehicles, ships"]];
-const ICON=Object.fromEntries(RES.map(r=>[r[0],r[1]])), fmt=n=>String(Math.round(n*10)/10), TN={plains:"Plains",forest:"Forest 🌲",urban:"Ruins ▦",mud:"Mud ≈",sea:"Sea ⚓"};
+const ICON=Object.fromEntries(RES.map(r=>[r[0],r[1]])), fmt=n=>String(Math.round(n*10)/10), TN={plains:"Plains",forest:"Forest 🌲",urban:"Ruins ▦",mud:"Mud ≈",sea:"Sea ⚓",ice:"Ice ❄"};
 const LETTER={infantry:"🪖",armor:"🛡️",destroyer:"🚢",transport:"⛴️",engineer:"🔧",scout:"🔭"};
 const CLS={infantry:"foot",engineer:"foot",scout:"foot",armor:"veh",destroyer:"nav",transport:"amph"};
 const MP={infantry:3,engineer:3,scout:5,armor:4,destroyer:4,transport:4}, RNG={infantry:1,engineer:1,scout:1,armor:2,destroyer:3,transport:1};
-const MC={plains:1,forest:2,urban:2,mud:3,sea:1};
-const OK={foot:["plains","forest","urban","mud"],veh:["plains","forest","mud"],nav:["sea"],amph:["plains","mud","sea"]};
+const MC={plains:1,forest:2,urban:2,mud:3,sea:1,ice:1};
+const OK={foot:["plains","forest","urban","mud","ice"],veh:["plains","forest","mud","ice"],nav:["sea"],amph:["plains","mud","sea","ice"]};
 /* Tiles the unit can reach in one move (mirrors server rules; ignores resource cost). */
 function reach(u){
   const W=S.grid[0].length,H=S.grid.length,ok=OK[CLS[u.type]],K=(x,y)=>x+","+y,best={[K(u.pos[0],u.pos[1])]:0},q=[[0,u.pos[0],u.pos[1]]],out=new Set();
@@ -158,7 +173,7 @@ function reach(u){
   return out;
 }
 const MAXHP={infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60};
-const WI={clear:"☀️ Clear",rain:"🌧 Rain",storm:"⛈ Storm"};
+const WI={clear:"☀️ Clear",rain:"🌧 Rain",storm:"⛈ Storm",freeze:"❄ Freeze"};
 const SCN_BLURB={skirmish:"Random map: capture or destroy the enemy HQ.",supply_run:"Tutorial: hold 2 supply bases by round 14. Walk infantry onto a base, then press Capture node.",hold_line:"Survive until round 15 against a brutal commander.",lean_war:"You start with half the food. Cut the enemy's supply roads before yours starve."};
 const FRIENDLY={no_actions_left:"No moves left this turn. Press End turn.",not_visible:"You can't see that target (fog).",out_of_range:"Target is out of range.",no_bullets:"Not enough bullets.",cannot_afford:"Not enough resources for that.",illegal_target:"You can't target that.",attacker_frozen:"That unit is frozen: no supplies.",cannot_plant:"Can't plant a mine here.",tile_unsuitable:"Can't plant a mine on this tile.",nothing_found:"No mine found on that tile.",not_your_turn:"It isn't your turn.",
   threshold_not_met:"Capture failed: the target must be infantry at 60% health or less, and you need 1.6× its strength.",cannot_bomb:"Can't bomb: no bombs left.",no_such_mine:"There's no mine of yours on that tile.",
@@ -183,7 +198,7 @@ const free=u=>u.carrier===null||u.carrier===undefined;
 function apply(res){
   MV=null; S=res.snapshot; ST=res.state; SIG=res.sig;
   if(res.result&&res.result.ok&&lastAction) REPLAY.actions.push(lastAction);
-  const la=lastAction; lastAction=null; if(!REPLAY.initial) REPLAY.initial=ST; if(!startRes) startRes={...S.me.res};
+  const la=lastAction; lastAction=null; if(!REPLAY.initial){ REPLAY.initial=ST; REPLAY.sig=SIG; } if(!startRes) startRes={...S.me.res};
   if(S.winner==="player"&&S.scenario!=="skirmish"){
     const r=S.units.filter(u=>mine(u)&&["infantry","engineer"].includes(u.type)).map(u=>u.rank).sort((a,b)=>b-a).slice(0,8);
     localStorage.setItem("warchess.vets",r.join(","));
@@ -206,8 +221,11 @@ function logEvent(e){
 }
 
 function render(noUI){
-  const H=S.grid.length,W=S.grid[0].length, dpr=window.devicePixelRatio||1;
-  cv.width=W*T*dpr; cv.height=H*T*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const H=S.grid.length,W=S.grid[0].length, dpr=window.devicePixelRatio||1, [vw,vh]=viewSize();
+  if(cv.width!==Math.round(vw*dpr)||cv.height!==Math.round(vh*dpr)){ cv.width=Math.round(vw*dpr); cv.height=Math.round(vh*dpr); cv.style.width=vw+"px"; cv.style.height=vh+"px"; }
+  if(!cam.on){ cam.on=true; cam.z=.9; const h=S.buildings.find(b=>b.type==="hq"&&b.owner==="player"); if(h) centerOn(h.pos[0],h.pos[1]); }
+  clampCam(); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.globalAlpha=1; ctx.lineWidth=1; ctx.setLineDash([]); ctx.fillStyle="#1a2330"; ctx.fillRect(0,0,vw,vh);
+  ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,-cam.x*dpr*cam.z,-cam.y*dpr*cam.z);
   ctx.textAlign="center"; ctx.textBaseline="middle";
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const t=S.grid[y][x]; ctx.fillStyle=COL[t]; ctx.fillRect(x*T,y*T,T,T);
@@ -249,6 +267,7 @@ function render(noUI){
   const now=performance.now(), calm=matchMedia("(prefers-reduced-motion: reduce)").matches;
   PINGS.forEach(p=>{ const a=(now-p.t)/1400; ctx.strokeStyle=p.color; ctx.globalAlpha=Math.max(0,1-a*.8); ctx.lineWidth=4; ctx.beginPath(); ctx.arc(p.x*T+T/2,p.y*T+T/2,calm?T*.6:T*(.4+a*1.2),0,7); ctx.stroke(); ctx.globalAlpha=1; ctx.lineWidth=1; });
   if(!noUI) ui();
+  endCheck();
 }
 /* ---- feedback: toast message + ping ring on the map + optional beep ---- */
 let PINGS=[],animOn=false,AC=null,MUTE=localStorage.getItem("warchess.mute")==="1";
@@ -271,7 +290,7 @@ function setSnd(){ $("sndbtn").textContent=MUTE?"🔇 Sound off":"🔊 Sound on"
 $("sndbtn").onclick=()=>{ MUTE=!MUTE; localStorage.setItem("warchess.mute",MUTE?"1":"0"); setSnd(); }; setSnd();
 /* Exact move preview: asked from the server (same rules as the real move), debounced and cached. */
 function queueMove(x,y){
-  clearTimeout(mvT); MV=null; const u=S&&S.units.find(k=>k.id===sel);
+  clearTimeout(mvT); MV=null; if(REPLAYING) return; const u=S&&S.units.find(k=>k.id===sel);
   if(!u||!mine(u)||u.frozen||mode!=="move"||S.active!=="player"||S.winner||S.actionsLeft<=0||busy||S.units.some(k=>free(k)&&k.pos[0]===x&&k.pos[1]===y)) return;
   const key=SIG+"|"+u.id+"|"+x+","+y; if(mvCache.has(key)){ MV={...mvCache.get(key),x,y}; return; }
   const tok=++mvTok;
@@ -347,6 +366,8 @@ function ui(){
   Object.entries(S.forecast||{}).forEach(([k,r])=>{ if(r.runs_out_in!==null&&r.runs_out_in<=3&&me.res[k]>.001) w.push(["crit",`${k[0].toUpperCase()+k.slice(1)} runs out in ${r.runs_out_in} round${r.runs_out_in===1?"":"s"} at the current rate.`]); });
   if(me.moral<30) w.push(["crit","Morale under 30: supply bases give you nothing."]);
   else if(S.supplyConnected>S.supplyUseful) w.push(["warnc",`Only ${S.supplyUseful} of your ${S.supplyConnected} connected bases pay out at this morale. Raise morale to use the rest.`]);
+  if(S.attritionUnits>0) w.push(["warnc",`${S.attritionUnits} of your units are far from any outpost (HQ, Supply Base, Barracks): their upkeep costs 2.5×. Build an outpost closer to the front.`]);
+  if(S.weather==="freeze"&&S.units.some(u=>mine(u)&&free(u)&&S.grid[u.pos[1]][u.pos[0]]==="ice")) w.push(["crit","❄ Your units are standing on ice. When the cold ends the ice melts and they drown!"]);
   if(frozen) w.push(["crit",`${frozen} frozen unit(s): any enemy with supplies beats them instantly.`]);
   $("warns").innerHTML=w.length?w.map(([c,t])=>`<div class="${c}">• ${t}</div>`).join(""):"<span class='good'>All clear</span>";
   $("pris").innerHTML=S.prisoners.length?S.prisoners.map(p=>`#${p.id} ${p.type}<div class="row"><button data-a="interrogate" data-id="${p.id}" data-mode="resource" title="Costs money, prisoner lives">Question (costs money)</button><button data-a="interrogate" data-id="${p.id}" data-mode="force" title="Prisoner dies, −8 morale">Force (−8 morale)</button><button data-a="release" data-id="${p.id}" title="+1.5 morale">Release</button></div>`).join("<hr>"):"None";
@@ -379,7 +400,34 @@ function hint(){
    S.actionsLeft===0?"No moves left. Press End turn.":u&&mine(u)?(u.frozen?"This unit is frozen (no supplies). Pick another.":"Blue tiles = where this unit can move. Click one to go (hover any tile to see what it costs). Red box = enemy in range: click it to attack, capture or bribe."):`Pick a unit. You have ${S.actionsLeft} moves this turn.`;
 }
 
-function tileAt(ev){ const r=cv.getBoundingClientRect(), k=cv.width/(window.devicePixelRatio||1)/r.width; return [Math.floor((ev.clientX-r.left)*k/T),Math.floor((ev.clientY-r.top)*k/T)]; }
+/* ---- camera: zoom (wheel / buttons), pan (drag / arrow keys), whole-map fit ---- */
+function viewSize(){ const b=$("boardbox"); return [Math.max(320,b.clientWidth-16),Math.max(340,Math.min(window.innerHeight*.72,760))]; }
+function minZoom(){ const [vw,vh]=viewSize(); return Math.min(vw/(S.grid[0].length*T),vh/(S.grid.length*T)); }
+function clampCam(){ const [vw,vh]=viewSize(),W=S.grid[0].length*T,H=S.grid.length*T; cam.z=Math.min(3,Math.max(minZoom(),cam.z));
+  const mx=W-vw/cam.z,my=H-vh/cam.z; cam.x=mx<=0?mx/2:Math.min(Math.max(0,cam.x),mx); cam.y=my<=0?my/2:Math.min(Math.max(0,cam.y),my); }
+function centerOn(x,y){ const [vw,vh]=viewSize(); cam.x=x*T+T/2-vw/2/cam.z; cam.y=y*T+T/2-vh/2/cam.z; }
+function zoomAt(cx,cy,f){ if(!S) return; const r=cv.getBoundingClientRect(), px=cx-r.left, py=cy-r.top, wx=cam.x+px/cam.z, wy=cam.y+py/cam.z;
+  cam.z*=f; clampCam(); cam.x=wx-px/cam.z; cam.y=wy-py/cam.z; render(true); }
+function zoomMid(f){ const r=cv.getBoundingClientRect(); zoomAt(r.left+r.width/2,r.top+r.height/2,f); }
+let drag=null,moved=false;
+cv.addEventListener("pointerdown",ev=>{ drag={x:ev.clientX,y:ev.clientY,cx:cam.x,cy:cam.y}; moved=false; });
+window.addEventListener("pointermove",ev=>{ if(!drag||!S) return; const dx=ev.clientX-drag.x,dy=ev.clientY-drag.y; if(!moved&&Math.hypot(dx,dy)<6) return;
+  moved=true; cam.x=drag.cx-dx/cam.z; cam.y=drag.cy-dy/cam.z; render(true); });
+window.addEventListener("pointerup",()=>{ drag=null; });
+cv.addEventListener("wheel",ev=>{ ev.preventDefault(); zoomAt(ev.clientX,ev.clientY,ev.deltaY<0?1.15:1/1.15); },{passive:false});
+window.addEventListener("resize",()=>{ if(S) render(true); });
+$("zin").onclick=()=>zoomMid(1.3); $("zout").onclick=()=>zoomMid(1/1.3);
+$("zfit").onclick=()=>{ if(S){ cam.z=minZoom(); render(true); } };
+$("zhome").onclick=()=>{ if(!S) return; const h=S.buildings.find(b=>b.type==="hq"&&b.owner==="player"); cam.z=Math.max(cam.z,.9); if(h) centerOn(h.pos[0],h.pos[1]); render(true); };
+function tileAt(ev){ const r=cv.getBoundingClientRect(); return [Math.floor((cam.x+(ev.clientX-r.left)/cam.z)/T),Math.floor((cam.y+(ev.clientY-r.top)/cam.z)/T)]; }
+/* ---- Victory / Defeat modal ---- */
+function endCheck(){ if(!S||!S.winner||REPLAYING||endShown) return; endShown=true; const w=S.winner==="player";
+  $("endt").textContent=w?"🏆 Victory":"💀 Defeat";
+  $("endb").textContent=`${w?"The enemy has been defeated.":"Your forces have been defeated."} The battle lasted ${S.round} rounds. You finished with ${S.units.filter(u=>mine(u)).length} units and morale ${Math.round(S.me.moral)}. Save the replay to watch it again later.`;
+  $("enddlg").showModal(); }
+$("endnew").onclick=()=>{ $("enddlg").close(); $("newgame").click(); };
+$("endrep").onclick=()=>$("replaybtn").click();
+$("endwatch").onclick=()=>{ $("enddlg").close(); $("playbtn").click(); };
 cv.addEventListener("mousemove",ev=>{
   if(!S) return; const [x,y]=tileAt(ev), ter=S.grid[y]&&S.grid[y][x];
   if(!ter){ hover=null; $("info").textContent=""; return; }
@@ -389,7 +437,8 @@ cv.addEventListener("mousemove",ev=>{
 });
 cv.addEventListener("mouseleave",()=>{hover=null;MV=null;mvTok++;clearTimeout(mvT);if(S)render();});
 cv.addEventListener("click",ev=>{
-  if(!S||S.active!=="player"||S.winner) return;
+  if(moved){ moved=false; return; }
+  if(REPLAYING||!S||S.active!=="player"||S.winner) return;
   const [x,y]=tileAt(ev), clicked=S.units.find(u=>u.pos[0]===x&&u.pos[1]===y&&free(u)), mn=S.mines.find(m=>m.owner==="player"&&m.pos[0]===x&&m.pos[1]===y);
   const V=validTiles(), key=x+","+y;
   if(V){
@@ -407,16 +456,16 @@ cv.addEventListener("click",ev=>{
   act({type:"move",unit:sel,x,y});
 });
 function setMode(m){ mode=m; render(); }
-function nextUnit(){ if(!S||S.active!=="player"||S.winner) return; const l=S.units.filter(u=>mine(u)&&free(u)&&!u.frozen); if(!l.length) return;
+function nextUnit(){ if(REPLAYING||!S||S.active!=="player"||S.winner) return; const l=S.units.filter(u=>mine(u)&&free(u)&&!u.frozen); if(!l.length) return;
   const i=l.findIndex(u=>u.id===sel); sel=l[(i+1)%l.length].id; mode="move"; render(); }
 $("nextunit").onclick=nextUnit;
 $("cancel").onclick=()=>{ mode="move"; render(); };
-async function act(a){ if(busy||!S||S.winner) return; busy=true; document.body.style.cursor="progress"; lastAction={...a};
+async function act(a){ if(REPLAYING||busy||!S||S.winner) return; busy=true; document.body.style.cursor="progress"; lastAction={...a};
   if(a.type==="end_turn"){ $("hint").className=""; $("hint").textContent="Enemy is moving…"; $("endturn").disabled=true; }
   try{ apply(await api("/api/action",{...a,state:ST,sig:SIG})); } catch(e){ if(S) ui(); } finally{ busy=false; document.body.style.cursor=""; } }
 
 document.addEventListener("click",ev=>{
-  const b=ev.target.closest("button[data-a]"); if(!b||b.disabled) return; const d=b.dataset;
+  const b=ev.target.closest("button[data-a]"); if(REPLAYING||!b||b.disabled) return; const d=b.dataset;
   if(d.a==="plant"||d.a==="capture_node") act({type:d.a,unit:sel});
   else if(d.a==="surround") act({type:"surround",unit:sel});
   else if(d.a==="board") act({type:"load",unit:sel,target:+d.tr});
@@ -440,13 +489,54 @@ async function enemyMenu(t){
   d.showModal();
 }
 
+/* ---- Replay player: re-runs the recorded actions on the server from the saved, signed start state ---- */
+let REPLAYING=false,RP=null;
+const rpLabel=a=>({move:`Move #${a.unit} to (${a.x},${a.y})`,attack:`Attack #${a.target} with #${a.unit}`,capture_unit:`Capture #${a.target}`,bribe:`Bribe #${a.target} (${a.offer}×)`,bomb:`Bomb (${a.x},${a.y})`,plant:`Plant mine #${a.unit}`,detonate:`Detonate (${a.x},${a.y})`,defuse:`Defuse (${a.x},${a.y})`,load:`Board #${a.unit}`,unload:`Unload #${a.unit}`,build:`Build ${a.btype}`,capture_node:`Capture node #${a.unit}`,surround:"Capture surrounded",interrogate:`Interrogate #${a.target} (${a.mode})`,release:`Release #${a.target}`,end_turn:"End turn (enemy plays)"}[a.type]||String(a.type));
+function rbarUpdate(){ const n=RP.actions.length,i=RP.idx;
+  $("rtxt").textContent=`▶ Replay · step ${i} of ${n} · Round ${S.round}`+(i>0?` · ${rpLabel(RP.actions[i-1])}`:" · start")+(i===n?" · 🏁 end of replay":"");
+  $("rfirst").disabled=$("rback").disabled=i===0; $("rnext").disabled=i>=n; $("rplay").textContent=RP.timer?"⏸ Pause":"▶ Play"; }
+function showFrame(){ const f=RP.frames[RP.idx]; S=f.snapshot; ST=f.state; SIG=f.sig; sel=null; mode="move"; MV=null; hover=null;
+  $("log").innerHTML=""; for(let i=1;i<=RP.idx;i++) (RP.frames[i].events||[]).forEach(logEvent);
+  render(); rbarUpdate(); }
+function rpPause(){ if(!RP) return; if(RP.timer){ clearInterval(RP.timer); RP.timer=null; } rbarUpdate(); }
+async function rpNext(){
+  if(!RP||busy) return; if(RP.idx>=RP.actions.length) return rpPause();
+  if(RP.frames.length-1>RP.idx){ RP.idx++; return showFrame(); }          // already fetched: reuse
+  busy=true;
+  try{ const f=RP.frames[RP.idx], r=await api("/api/action",{...RP.actions[RP.idx],state:f.state,sig:f.sig}); RP.frames.push(r); RP.idx++; showFrame(); }
+  catch(e){ rpPause(); } finally{ busy=false; } }
+function rpPlay(){ if(RP.timer) return rpPause(); if(RP.idx>=RP.actions.length){ RP.idx=0; showFrame(); } RP.timer=setInterval(rpNext,+$("rspeed").value); rbarUpdate(); }
+function rpExit(){ if(!RP) return; rpPause(); const L=RP.live; RP=null; REPLAYING=false; S=L.S; ST=L.ST; SIG=L.SIG; sel=L.sel; mode=L.mode; startRes=L.startRes;
+  $("log").innerHTML=L.log; $("rbar").style.display="none"; $("cmd").style.display=""; render(); }
+async function startReplay(d){
+  if(REPLAYING) rpExit();
+  if(!d||!d.initial||!d.sig||!Array.isArray(d.actions)) return toast("This replay can't be played: it has no start signature (saved by an older version).","bad");
+  if(busy) return; busy=true;
+  try{ const f=await api("/api/load",{state:d.initial,sig:d.sig});
+    RP={frames:[f],actions:d.actions.slice(0,2000),idx:0,timer:null,live:{S,ST,SIG,sel,mode,startRes,log:$("log").innerHTML}};
+    REPLAYING=true; $("cmd").style.display="none"; $("rbar").style.display="flex";
+    if(d.rules!=null&&f.snapshot.rulesVersion!==d.rules) toast("Recorded on older rules: it may not play out the same.","warn");
+    showFrame(); }
+  catch(e){} finally{ busy=false; } }
+$("playbtn").onclick=()=>{ $("rcur").disabled=!(REPLAY.sig&&REPLAY.actions.length); $("replaydlg").showModal(); };
+$("rcur").onclick=()=>{ $("replaydlg").close(); startReplay({initial:REPLAY.initial,sig:REPLAY.sig,actions:REPLAY.actions,rules:S&&S.rulesVersion}); };
+$("rload").onclick=()=>$("rfile").click();
+$("rfile").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return; $("replaydlg").close();
+  try{ startReplay(JSON.parse(await f.text())); }catch(err){ toast("That file isn't a valid replay.","bad"); } };
+$("rfirst").onclick=()=>{ rpPause(); RP.idx=0; showFrame(); };
+$("rback").onclick=()=>{ if(RP.idx>0){ rpPause(); RP.idx--; showFrame(); } };
+$("rnext").onclick=()=>{ rpPause(); rpNext(); };
+$("rplay").onclick=rpPlay; $("rexit").onclick=rpExit;
+$("rspeed").onchange=()=>{ if(RP&&RP.timer){ clearInterval(RP.timer); RP.timer=setInterval(rpNext,+$("rspeed").value); } };
 $("endturn").onclick=()=>{ mode="move"; act({type:"end_turn"}); };
 function openManual(){ const c=S&&S.terrainCost; $("mtc").innerHTML=c?Object.entries(c).map(([t,v])=>`<tr><td>${TN[t]}</td><td>${v.mp}</td><td>${ICON[v.res]} ${fmt(v.amt)}</td></tr>`).join(""):""; $("manual").showModal(); }
 $("manualbtn").onclick=openManual;
 $("codexbtn").onclick=()=>$("codex").showModal();
-$("replaybtn").onclick=()=>{ const b=new Blob([JSON.stringify({game:"war-chess",version:3,...REPLAY},null,1)],{type:"application/json"}), a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click(); };
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ mode="move"; if(S) render(); } else if((e.key==="n"||e.key==="N")&&!e.target.closest("dialog")) nextUnit(); });
+$("replaybtn").onclick=()=>{ const b=new Blob([JSON.stringify({game:"war-chess",version:3,rules:S&&S.rulesVersion,...REPLAY},null,1)],{type:"application/json"}), a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download="warchess-replay.json"; a.click(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ mode="move"; if(S) render(); } else if((e.key==="n"||e.key==="N")&&!e.target.closest("dialog")) nextUnit(); else if(PAN[e.key]&&S&&!e.target.closest("dialog")){ e.preventDefault(); cam.x+=PAN[e.key][0]*90/cam.z; cam.y+=PAN[e.key][1]*90/cam.z; render(true); } });
 async function newGame(){
+  if(REPLAYING) rpExit();
+  cam.on=false; endShown=false;
   startRes=null; sel=null; mode="move"; REPLAY={initial:null,actions:[]}; $("log").innerHTML=""; localStorage.removeItem(SAVE);
   const seed=new URLSearchParams(location.search).get("seed")||Math.floor(Math.random()*9999), sc=$("scn").value;
   const vets=sc!=="skirmish"?(localStorage.getItem("warchess.vets")||""):"";

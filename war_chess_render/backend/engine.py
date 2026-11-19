@@ -38,6 +38,7 @@ class Terrain(str, Enum):
     URBAN = "urban"
     MUD = "mud"
     SEA = "sea"
+    ICE = "ice"          # dynamic: SEA frozen solid during a Freeze
 
 
 class Res(str, Enum):
@@ -66,6 +67,7 @@ class Weather(str, Enum):
     CLEAR = "clear"
     RAIN = "rain"
     STORM = "storm"
+    FREEZE = "freeze"    # extreme cold: SEA becomes walkable ICE; when it thaws, everything on it drowns
 
 
 class UnitType(str, Enum):
@@ -83,6 +85,8 @@ class BuildingType(str, Enum):
     BARRACKS = "barracks"
     HQ = "hq"
 
+
+OUTPOST_TYPES = frozenset({BuildingType.HQ, BuildingType.SUPPLY_BASE, BuildingType.BARRACKS})
 
 # --------------------------------------------------------------------------- #
 # Static data tables (tune here, not in logic)
@@ -106,6 +110,7 @@ TERRAIN: dict[Terrain, TerrainSpec] = {
     Terrain.URBAN: TerrainSpec(2, 0.50, 0.35, True, Res.MATERIALS, 2.0,
                                frozenset({UnitClass.FOOT})),  # no heavy vehicles
     Terrain.MUD: TerrainSpec(3, 0.00, 0.00, False, Res.FUEL, 2.0, LAND),
+    Terrain.ICE: TerrainSpec(1, 0.00, 0.00, False, Res.FUEL, 1.5, LAND),
     Terrain.SEA: TerrainSpec(1, 0.00, 0.00, False, Res.MONEY, 3.0,
                              frozenset({UnitClass.NAVAL, UnitClass.AMPHIB})),
 }
@@ -117,7 +122,10 @@ WEATHER_MULT: dict[tuple[Weather, Terrain], float] = {
     (Weather.STORM, Terrain.SEA): 2.0, (Weather.STORM, Terrain.MUD): 1.5, (Weather.STORM, Terrain.PLAINS): 1.25,
 }
 SAVE_VERSION = 3
+RULES_VERSION = 8             # bump when balance/rules change: replays recorded on another version may diverge
 CARGO_CAP = 2
+OUTPOST_RANGE = 8             # units farther than this (tiles) from every finished HQ / Supply Base / Barracks suffer attrition
+ATTRITION_MULT = 2.5          # their upkeep is multiplied: wasteful, not frozen -> forces outpost hopping
 HEAL_PER_ROUND = 8
 MAX_ACTIONS = 5               # actions per side per turn (move/attack/build/plant/...)
 WEARINESS_START = 60          # after this round every burn/upkeep grows 3% per round
@@ -325,7 +333,36 @@ class GameState:
         return 0 <= c[0] < self.w and 0 <= c[1] < self.h
 
     def terrain_at(self, c: Coord) -> Terrain:
-        return self.grid[c[1]][c[0]]
+        """EFFECTIVE terrain: the stored grid is the base map; weather changes it (rain: plains->mud, freeze: sea->ice)."""
+        t = self.grid[c[1]][c[0]]
+        if t is Terrain.SEA and self.weather is Weather.FREEZE:
+            return Terrain.ICE
+        if t is Terrain.PLAINS and self.weather in (Weather.RAIN, Weather.STORM):
+            return Terrain.MUD
+        return t
+
+    def set_weather(self, new: Weather) -> None:
+        old, self.weather = self.weather, new
+        self.emit("weather_changed", weather=new.value)
+        if old is Weather.FREEZE and new is not Weather.FREEZE:      # the ice melts
+            for u in list(self.units.values()):
+                if self.grid[u.pos[1]][u.pos[0]] is Terrain.SEA and u.spec.cls not in (UnitClass.NAVAL, UnitClass.AMPHIB):
+                    self.emit("ice_thaw_drown", unit=u.id, owner=u.owner.value, pos=u.pos)
+                    self.kill_unit(u.id, "drowned_in_thaw")
+
+    def far_units(self, side: Side) -> set:
+        posts = [b.pos for b in self.buildings.values() if b.owner is side and b.active and b.type in OUTPOST_TYPES]
+        return {u.id for u in self.units_of(side)
+                if not posts or min(max(abs(u.pos[0] - p[0]), abs(u.pos[1] - p[1])) for p in posts) > OUTPOST_RANGE}
+
+    def upkeep_per_round(self, side: Side) -> dict:
+        """Base upkeep before morale/weariness. Units out of outpost range cost ATTRITION_MULT times more."""
+        far, per = self.far_units(side), {}
+        for u in self.units_of(side):
+            k = ATTRITION_MULT if u.id in far else 1.0
+            for r, amt in u.spec.upkeep.items():
+                per[r] = per.get(r, 0.0) + amt * k
+        return per
 
     @staticmethod
     def neighbors8(c: Coord):
@@ -603,7 +640,7 @@ class GameState:
         if max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) > 1:
             return False
         if (not self.in_bounds(c) or c in self.buildings or self.unit_at(c)
-                or self.terrain_at(c) is Terrain.SEA):
+                or self.grid[c[1]][c[0]] is Terrain.SEA):      # never on water (ice does not count as land)
             return False
         if not self.spend(u.owner, BUILD_COST[btype]):
             return False
@@ -647,8 +684,7 @@ class GameState:
     def begin_round(self) -> None:
         self.round += 1
         if self.round % 3 == 0:
-            self.weather = self.rng.choices(list(Weather), weights=[55, 30, 15])[0]
-            self.emit("weather_changed", weather=self.weather.value)
+            self.set_weather(self.rng.choices(list(Weather), weights=[50, 25, 10, 15])[0])
         for b in self.buildings.values():
             if b.build_turns_left > 0:
                 b.build_turns_left -= 1
@@ -680,10 +716,7 @@ class GameState:
 
     def pay_upkeep(self, side: Side) -> None:
         cm = self.consumption_mult(side)
-        need: dict = {}
-        for u in self.units_of(side):
-            for r, amt in u.spec.upkeep.items():
-                need[r] = need.get(r, 0.0) + amt * cm
+        need = {r: amt * cm for r, amt in self.upkeep_per_round(side).items()}
         short = self.drain(side, need)
         if short:
             self.emit("upkeep_shortfall", side=side.value, short=_ser(short))
@@ -725,10 +758,7 @@ class GameState:
         """Upkeep runway per resource, assuming the army stands still (terrain burn is extra).
         Mirrors begin_round exactly: round+1 -> upkeep (clamped at 0) -> payday (if round % 5 == 0).
         runs_out_in = number of further End turns until the stock is 0 after payday (None = beyond horizon)."""
-        per: dict = {}
-        for u in self.units_of(side):
-            for r, amt in u.spec.upkeep.items():
-                per[r] = per.get(r, 0.0) + amt
+        per = self.upkeep_per_round(side)
         moral_cm = lerp_table(CONSUMPTION_MULT_TABLE, self.factions[side].moral)
         supply = min(supply_multiplier(len(self.connected_supply_bases(side))), self.supply_cap(side))
         ship = {r: amt * supply * self.income_mult(side) for r, amt in PAYDAY_BASE.items()}
@@ -823,7 +853,7 @@ class GameState:
             "winner": self.winner.value if self.winner else None,
             "difficulty": self.difficulty.value,
             "paydayIn": PAYDAY_INTERVAL - (self.round % PAYDAY_INTERVAL),
-            "grid": [[t.value for t in row] for row in self.grid],
+            "grid": [[self.terrain_at((x, y)).value for x in range(self.w)] for y in range(self.h)],   # effective terrain (weather applied)
             "units": [{"id": u.id, "owner": u.owner.value, "type": u.type.value,
                        "pos": u.pos, "rank": u.rank, "hp": u.hp, "frozen": u.frozen, "kills": u.kills, "carrier": u.carrier}
                       for u in self.units.values()
@@ -852,6 +882,8 @@ class GameState:
             "supplyConnected": len(self.connected_supply_bases(viewer)),
             "supplyUseful": max(n for n, v in enumerate(SUPPLY_FIB) if v <= self.supply_cap(viewer) + 1e-9),   # bases that still pay at this morale
             "supplyTotal": self.count_buildings(viewer, BuildingType.SUPPLY_BASE),
+            "rulesVersion": RULES_VERSION,
+            "attritionUnits": len(self.far_units(viewer)),
         }
 
 

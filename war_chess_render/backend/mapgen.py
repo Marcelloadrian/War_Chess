@@ -94,7 +94,7 @@ def _carve_road(grid, a: Coord, b: Coord) -> None:
     grid[y][x] = Terrain.PLAINS
 
 
-def generate(width: int = 32, height: int = 20, difficulty: Difficulty = Difficulty.MEDIUM,
+def generate(width: int = 50, height: int = 50, difficulty: Difficulty = Difficulty.MEDIUM,
              seed: int = 0) -> GameState:
     rng = random.Random(seed)
     elev = _value_noise(width, height, rng, 5)

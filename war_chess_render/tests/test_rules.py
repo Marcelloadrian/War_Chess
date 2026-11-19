@@ -92,8 +92,9 @@ def test_supply_line_cut_by_enemy_zone_of_control():
 def test_weather_raises_burn():
     s = game(); u = s.units_of(Side.PLAYER)[0]
     c = next(n for n in s.neighbors8(u.pos) if s.can_enter(u, n) and s.terrain_at(n) is Terrain.PLAINS)
-    clear = s.step_cost(u, c)[1][Res.FOOD]; s.weather = Weather.RAIN
-    assert s.step_cost(u, c)[1][Res.FOOD] == pytest.approx(clear * 1.5)
+    clear = s.step_cost(u, c); s.weather = Weather.RAIN
+    wet = s.step_cost(u, c)                              # rain turns plains into mud: slower and burns fuel instead of food
+    assert s.terrain_at(c) is Terrain.MUD and wet[0] > clear[0] and Res.FUEL in wet[1]
 
 
 def test_survive_objective_wins_for_player():
@@ -363,3 +364,51 @@ def test_round_trickle_ignores_supply_bases():
         assert s.round == 2
         assert abs(s.factions[Side.PLAYER].res[Res.MATERIALS] - before - ROUND_INCOME[Res.MATERIALS] * s.income_mult(Side.PLAYER)) < 1e-6
     assert a.factions[Side.PLAYER].res == b.factions[Side.PLAYER].res
+
+
+def test_replay_reproduces_the_game_exactly():
+    """A replay = the signed start state + the list of actions. Re-running them must end in the identical state."""
+    from fastapi.testclient import TestClient
+    import server
+    c = TestClient(server.app); start = c.get("/api/new?seed=9").json(); cur, acts = start, []
+    u = next(x for x in start["snapshot"]["units"] if x["owner"] == "player" and x["type"] == "infantry")
+    plan = [{"type": "move", "unit": u["id"], "x": u["pos"][0] + 2, "y": u["pos"][1]}, {"type": "end_turn"}, {"type": "end_turn"}, {"type": "end_turn"}]
+    for a in plan:
+        r = c.post("/api/action", json={**a, "state": cur["state"], "sig": cur["sig"]}).json()
+        if r["result"]["ok"]:
+            acts.append(a); cur = r
+    assert any(a["type"] == "end_turn" for a in acts)
+    rep = c.post("/api/load", json={"state": start["state"], "sig": start["sig"]}).json()
+    for a in acts:
+        rep = c.post("/api/action", json={**a, "state": rep["state"], "sig": rep["sig"]}).json()
+    assert rep["state"] == cur["state"] and rep["sig"] == cur["sig"] and cur["snapshot"]["rulesVersion"] == RULES_VERSION
+
+
+def test_ice_freeze_thaw_drowns_land_units_but_not_buildings_on_water():
+    s = game(1); u = s.units_of(Side.PLAYER)[0]
+    sea = next((x, y) for y in range(s.h) for x in range(s.w) if s.grid[y][x] is Terrain.SEA)
+    s.set_weather(Weather.FREEZE)
+    assert s.terrain_at(sea) is Terrain.ICE and not s.can_enter(u, sea) is False
+    u.pos = sea
+    s.set_weather(Weather.FREEZE)                       # still frozen: safe
+    assert u.id in s.units
+    s.set_weather(Weather.CLEAR)                        # thaw
+    assert u.id not in s.units
+    s.set_weather(Weather.FREEZE)
+    assert s.grid[sea[1]][sea[0]] is Terrain.SEA        # stored map never changes, only the effective terrain
+
+
+def test_attrition_makes_far_units_cost_more_not_freeze():
+    s = game(2); u = s.units_of(Side.PLAYER)[0]
+    near = s.upkeep_per_round(Side.PLAYER)
+    posts = [b.pos for b in s.buildings.values() if b.owner is Side.PLAYER and b.type in OUTPOST_TYPES]
+    far = next((x, y) for y in range(s.h) for x in range(s.w)
+               if all(max(abs(x - p[0]), abs(y - p[1])) > OUTPOST_RANGE for p in posts))
+    u.pos = far
+    assert u.id in s.far_units(Side.PLAYER) and s.upkeep_per_round(Side.PLAYER)[Res.FOOD] > near[Res.FOOD]
+    assert not u.frozen
+
+
+def test_map_is_50_by_50():
+    s = scenarios.build("skirmish", "medium", 3)
+    assert (s.w, s.h) == (50, 50)
