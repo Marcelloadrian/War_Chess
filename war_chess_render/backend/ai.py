@@ -93,6 +93,53 @@ def _economy(state: GameState, me: Side, foe: Side) -> None:
                 return
 
 
+def _flee(state: GameState, u: Unit, foes: list) -> None:
+    """The Commandant creeps one step away from the nearest visible enemy."""
+    best = max((n for n in state.neighbors8(u.pos) if state.in_bounds(n) and state.can_enter(u, n)),
+               key=lambda n: min((_dist(n, f.pos) for f in foes), default=0), default=None)
+    if best and foes:
+        state.move_unit(u.id, [best])
+
+
+def _info_base(state: GameState, me: Side) -> None:
+    if state.round < 6 or any(b.type is BuildingType.INFO_BASE and b.owner is me for b in state.buildings.values()):
+        return
+    hq, res = state.command_pos(me), state.factions[me].res
+    if not hq or res[Res.MATERIALS] < 110 or res[Res.MONEY] < 90:
+        return
+    for u in state.units_of(me):
+        if u.frozen or u.carrier is not None or _dist(u.pos, hq) > 6:
+            continue
+        for n in state.neighbors8(u.pos):
+            if state.in_bounds(n) and state.terrain_at(n) is Terrain.PLAINS and state.build(u.id, BuildingType.INFO_BASE, n):
+                return
+
+
+def _heavy(state: GameState, me: Side, foe: Side) -> None:
+    """Symmetric Heavy Artillery: sabotage an enemy one, build one if affordable, shell the densest visible cluster."""
+    foes = _visible_foes(state, me)
+    eha = next((f for f in foes if f.type is UnitType.HEAVY_ARTILLERY), None)
+    if eha:
+        for e in state.units_of(me):
+            if e.type is UnitType.ENGINEER and _dist(e.pos, eha.pos) <= 1 and state.sabotage(e.id, eha.id):
+                return
+    ha = next((u for u in state.units_of(me) if u.type is UnitType.HEAVY_ARTILLERY), None)
+    if ha is None:
+        if state.round >= 8 and not any(u.type is UnitType.HEAVY_ARTILLERY for u in state.units.values()):
+            for u in state.units_of(me):
+                if u.type is UnitType.ENGINEER and not u.frozen and u.carrier is None:
+                    for n in state.neighbors8(u.pos):
+                        if state.in_bounds(n) and state.build_artillery(u.id, n):
+                            return
+        return
+    mine = {u.pos for u in state.units_of(me)}
+    best = max(((sum(1 for f in foes if 0 <= f.pos[0] - x <= 1 and 0 <= f.pos[1] - y <= 1), (x, y))
+                for f in foes for x in (f.pos[0] - 1, f.pos[0]) for y in (f.pos[1] - 1, f.pos[1])
+                if not any((x + i, y + j) in mine for i in (0, 1) for j in (0, 1))), default=(0, None))
+    if best[0] >= 1 and state.actions_left(me) > 0:
+        state.fire_artillery(ha.id, best[1])
+
+
 def _flank(state: GameState, me: Side, foe_hq: Coord, my_hq: Coord, used: set) -> None:
     """Naval pincer: load 2 infantry, sail toward the enemy HQ coast, land them."""
     t = next((u for u in state.units_of(me) if u.type is UnitType.TRANSPORT and not u.frozen and u.carrier is None), None)
@@ -135,8 +182,13 @@ def play_turn(state: GameState, me: Side) -> None:
     _prisoners(state, me, P)
     _mines(state, me, foe)
     _economy(state, me, foe)
-    my_hq = next((b.pos for b in state.buildings.values() if b.type is BuildingType.HQ and b.owner is me), None)
-    foe_hq = next((b.pos for b in state.buildings.values() if b.type is BuildingType.HQ and b.owner is foe), None)
+    _info_base(state, me)
+    _heavy(state, me, foe)
+    state.update_discovery(me)
+    my_hq = state.command_pos(me)
+    real_hq = next((b.pos for b in state.buildings.values() if b.type is BuildingType.HQ and b.owner is foe), None)
+    # The enemy HQ is hidden: the AI only knows it once its units have SEEN it, otherwise it searches unexplored ground.
+    foe_hq = real_hq if (real_hq and me.value in state.meta["found"]) else (state.search_target(me) or real_hq)
     used: set = set()
     mine_room = sum(1 for m in state.mines.values() if m.owner is me) < MAX_MINES   # mines are scarce
     if P.get("flank") and foe_hq and my_hq:
@@ -152,6 +204,11 @@ def play_turn(state: GameState, me: Side) -> None:
         if state.actions_left(me) <= 0:
             break
         if state.winner or u.id not in state.units or u.frozen or u.carrier is not None or u.id in used:
+            continue
+        if u.type is UnitType.HEAVY_ARTILLERY:
+            continue
+        if u.type is UnitType.COMMANDANT:
+            _flee(state, u, _visible_foes(state, me))
             continue
         foes = _visible_foes(state, me)
         if u.type is UnitType.ENGINEER:

@@ -142,7 +142,7 @@ def action(a: Action):
     if s.winner or s.active is not ME:
         return _view(s, C.Outcome(False, "not_your_turn"))
     t, pos, r = a.type, ((a.x, a.y) if a.x is not None and a.y is not None else None), None
-    needs_pos = {"move", "bomb", "detonate", "build", "defuse", "unload"}
+    needs_pos = {"move", "bomb", "detonate", "build", "defuse", "unload", "fire", "build_ha"}
     if t not in ("end_turn", "interrogate", "release") and s.actions_left(ME) <= 0:
         return _view(s, C.Outcome(False, "no_actions_left"))
     try:
@@ -183,6 +183,14 @@ def action(a: Action):
             r = (C.force_interrogate if a.mode == "force" else C.resource_interrogate)(s, ME, a.target)
         elif t == "release":
             r = C.release_prisoner(s, ME, a.target)
+        elif t == "build_ha":
+            r = C.Outcome(s.build_artillery(a.unit, pos), "build_ha")
+        elif t == "fire":
+            r = C.Outcome(s.fire_artillery(a.unit, pos), "fire")
+        elif t == "sabotage":
+            r = C.Outcome(s.sabotage(a.unit, a.target), "sabotage")
+        elif t == "train_scout":
+            r = C.Outcome(s.train_scout(ME), "train_scout")
         elif t == "end_turn":
             s.end_turn()
             ai.play_ai_turn(s)

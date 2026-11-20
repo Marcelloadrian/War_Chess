@@ -412,3 +412,53 @@ def test_attrition_makes_far_units_cost_more_not_freeze():
 def test_map_is_50_by_50():
     s = scenarios.build("skirmish", "medium", 3)
     assert (s.w, s.h) == (50, 50)
+
+
+def _hq(s, side):
+    return next(b for b in s.buildings.values() if b.type is BuildingType.HQ and b.owner is side)
+
+
+def test_enemy_hq_is_hidden_until_found_and_info_base_is_backup_hq():
+    s = game(4)
+    types = lambda: {(b["type"], b["owner"]) for b in s.snapshot(Side.PLAYER)["buildings"]}
+    assert ("hq", "ai") not in types() and ("hq", "player") in types()          # the enemy HQ is not on your map
+    s.meta["found"].append("player")
+    assert ("hq", "ai") in types()                                              # ...until you have found it
+    s.buildings[(1, 1)] = Building(BuildingType.INFO_BASE, Side.AI, (1, 1))
+    del s.buildings[_hq(s, Side.AI).pos]; s.check_victory()
+    assert s.winner is None and not any(u.type is UnitType.COMMANDANT for u in s.units.values())   # backup HQ: game goes on
+    del s.buildings[(1, 1)]; s.check_victory()
+    assert any(u.type is UnitType.COMMANDANT and u.owner is Side.AI for u in s.units.values())      # now the Commandant appears
+
+
+def test_commandant_dies_in_thaw_and_loses_the_game():
+    s = game(4); del s.buildings[_hq(s, Side.AI).pos]; s.check_victory()
+    cmd = next(u for u in s.units.values() if u.type is UnitType.COMMANDANT)
+    sea = next((x, y) for y in range(s.h) for x in range(s.w) if s.grid[y][x] is Terrain.SEA)
+    s.set_weather(Weather.FREEZE); cmd.pos = sea
+    s.set_weather(Weather.CLEAR); s.check_victory()
+    assert cmd.id not in s.units and s.winner is Side.PLAYER                    # ice trap: instant defeat
+
+
+def test_heavy_artillery_rules():
+    s = game(4); me = Side.PLAYER; eng = next(u for u in s.units_of(me) if u.type is UnitType.ENGINEER)
+    for r in Res:
+        s.factions[me].res[r] = 500
+    spot = s._free_land_near(eng.pos, 1)
+    assert s.build_artillery(eng.id, spot)
+    assert s.factions[me].res[Res.MONEY] == pytest.approx(150)                  # 70% of everything drained
+    ha = s.unit_at(spot); assert ha.spec.mp == 0
+    assert not s.build_artillery(eng.id, s._free_land_near(eng.pos, 2))          # only ONE per game
+    assert not s.fire_artillery(ha.id, _hq(s, Side.AI).pos)                     # never at an HQ
+    victim = s.units_of(Side.AI)[0]; hp = victim.hp
+    assert s.fire_artillery(ha.id, victim.pos) and (victim.id not in s.units or victim.hp == hp - HA_DAMAGE)
+    foe_eng = s.spawn_unit(Side.AI, UnitType.ENGINEER, s._free_land_near(spot, 3)); s.factions[Side.AI].res[Res.FOOD] = 50
+    my_eng = s.spawn_unit(me, UnitType.ENGINEER, s._free_land_near(spot, 1))
+    assert not s.sabotage(my_eng.id, ha.id)                                     # cannot sabotage your own
+
+
+def test_info_base_trains_scouts():
+    s = game(4); me = Side.PLAYER; hq = _hq(s, me).pos
+    spot = s._free_land_near(hq, 2); s.buildings[spot] = Building(BuildingType.INFO_BASE, me, spot)
+    n = sum(1 for u in s.units_of(me) if u.type is UnitType.SCOUT)
+    assert s.train_scout(me) and sum(1 for u in s.units_of(me) if u.type is UnitType.SCOUT) == n + 1

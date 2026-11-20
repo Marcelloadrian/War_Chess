@@ -1,5 +1,5 @@
 // App-shell cache only. The game itself needs the API, so it is not playable offline.
-const C = "warchess-shell-v2";
+const C = "warchess-shell-v3";
 self.addEventListener("install", e => { e.waitUntil(caches.open(C).then(c => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"]))); self.skipWaiting(); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k))))));
 self.addEventListener("fetch", e => {

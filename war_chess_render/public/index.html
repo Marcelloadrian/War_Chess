@@ -28,11 +28,11 @@ header select,header button{background:#2b3a4a;color:#fff;border-color:#3d4f63}
 #endturn{background:var(--ink);color:#fff;border:0;padding:10px 18px;font-weight:700;font-size:16px;border-radius:10px}
 #endturn.ready{background:var(--ok);box-shadow:0 0 0 4px #bfe6cd}
 #boardbox{background:#c9d1c8;border-radius:12px;padding:8px;position:relative}
-#toasts{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:5;pointer-events:none;width:max-content;max-width:90%}
+#toasts{position:absolute;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:5;pointer-events:none;width:max-content;max-width:90%}
 .toast{padding:8px 14px;border-radius:10px;color:#fff;font-weight:600;box-shadow:0 4px 14px #0005;animation:tin .18s ease-out}
 .toast.bad{background:#a52a20}.toast.warn{background:#9a6a10}.toast.good{background:#237a4b}
 #cv{touch-action:none;cursor:grab;display:block;border-radius:8px}#cv:active{cursor:grabbing}
-#camctl{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;z-index:4}#camctl button{width:38px;height:38px;font-size:17px;padding:0}
+#camctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}#camctl button{width:auto;height:34px;padding:0 12px;font-size:15px}#camctl .small{margin-left:6px}
 @keyframes tin{from{opacity:0;transform:translateY(-8px)}}
 @media(prefers-reduced-motion:reduce){.toast{animation:none}}
 canvas{display:block;width:100%;height:auto;border-radius:8px;cursor:pointer;background:#9aa89a}
@@ -73,12 +73,12 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
       <button id="nextunit" title="Select the next unit that can still act (N)">Next unit (N)</button><button id="cancel">Cancel (Esc)</button><button id="endturn">End turn</button>
     </div>
     <div id="rbar"><div id="rtxt"></div><button id="rfirst" title="Back to the start">⏮ Start</button><button id="rback">◀ Back</button><button id="rplay" class="primary">▶ Play</button><button id="rnext">Next ▶</button><select id="rspeed" title="Playback speed"><option value="1800">Slow</option><option value="900" selected>Normal</option><option value="400">Fast</option></select><button id="rexit">Exit replay</button></div>
-    <div id="boardbox"><div id="toasts" role="status" aria-live="polite"></div><canvas id="cv" tabindex="0" aria-label="Game map"></canvas>
-      <div id="camctl"><button id="zin" title="Zoom in (mouse wheel)">＋</button><button id="zout" title="Zoom out">－</button><button id="zhome" title="Centre on your HQ">⌂</button><button id="zfit" title="Show the whole map">⛶</button></div></div>
+    <div id="boardbox"><div id="toasts" role="status" aria-live="polite"></div><div id="camctl"><button id="zin" title="Zoom in (or scroll the mouse wheel)">🔍＋ Zoom in</button><button id="zout" title="Zoom out">🔍－ Zoom out</button><button id="zhome" title="Centre on your HQ">⌂ My base</button><button id="zfit" title="Show the whole map">⛶ Whole map</button><span class="small">Zoom <b id="zlabel">90%</b> · wheel = zoom · drag = move map · arrow keys also move</span></div>
+      <canvas id="cv" tabindex="0" aria-label="Game map"></canvas></div>
     <div id="info">Hover a tile for details.</div>
     <div id="legend">
       <span><b style="border-color:#2f6fe4"></b>your building</span><span><b style="border-color:#d64541"></b>enemy building</span><span><b style="border-color:#fff;background:#fff3"></b>neutral (capture it)</span>
-      <span>🏛 HQ</span><span>📦 supply base</span><span>⛺ barracks</span><span>🧱 wall</span><span>▦ ruins</span><span>≈ mud</span><span>⚓ sea</span><span>🌲 forest</span>
+      <span>🏛 HQ</span><span>📦 supply base</span><span>⛺ barracks</span><span>🧱 wall</span><span>📡 info base</span><span>🎯 heavy artillery</span><span>👑 commandant</span><span>▦ ruins</span><span>≈ mud</span><span>⚓ sea</span><span>🌲 forest</span>
       <span><b style="border-color:#2f6fe4;background:#2f6fe44d"></b>can move here</span><span><b style="border-color:#ff2d2d"></b>enemy in range</span><span>🪖 infantry</span><span>🛡️ armor</span><span>🚢 destroyer</span><span>⛴️ transport</span><span>🔧 engineer</span><span>🔭 scout</span><span>darkened = fog</span><span>💣 your mine</span><span>❄ frozen</span>
     </div>
   </main>
@@ -121,8 +121,9 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)} #cancel{disp
 <table><tr><th>Building</th><th>Cost</th><th>Time</th><th>Effect</th></tr>
 <tr><td>🧱 Wall</td><td>10 materials</td><td>1</td><td>Blocks movement. A bomb destroys it and leaves ruins.</td></tr>
 <tr><td>📦 Supply base</td><td>40 materials, 30 money</td><td>3</td><td>Payday multiplier by connected bases (Fibonacci): 0 bases ×1, 1 ×2, 2 ×3, 3 ×5, 4 ×8, 5 ×13. Only bases connected to your HQ by land count, and morale caps the multiplier (see below).</td></tr>
+<tr><td>📡 Information Base</td><td>60 materials, 50 money</td><td>3</td><td>Backup HQ, outpost, trains Scouts. Hidden like the HQ.</td></tr>
 <tr><td>⛺ Barracks</td><td>35 materials, 20 money</td><td>2</td><td>Free infantry each payday (5 food). Lowers the armory cap by 40.</td></tr>
-<tr><td>🏛 HQ</td><td>-</td><td>-</td><td>Lose it and you lose. Drafts a recruit each payday while you have under 4 infantry.</td></tr></table>
+<tr><td>🏛 HQ</td><td>-</td><td>-</td><td>Hidden from the enemy until they find it. If your HQ and Information Base are both gone, your Commandant appears (see below). Drafts a recruit each payday while you have under 4 infantry.</td></tr></table>
 <h4>Supplies, payday and bankruptcy</h4>
 Every round you also get a small trickle of every resource (scaled by morale, never by supply bases). Payday, every 5 rounds, is the big shipment and the only one your supply bases multiply. Enemy units and the 8 tiles around them cut your supply road. A unit freezes the moment any resource it lives on hits 0, and any enemy with supplies beats a frozen unit instantly. Bullets and bombs share one armory cap (200, minus 40 per barracks, minimum 50). Food, fuel and money forecasts are in the side panel.
 <h4>Morale (0 to 100, starts at 50)</h4>
@@ -136,6 +137,10 @@ Every round you also get a small trickle of every resource (scaled by morale, ne
 Strength = base × rank (+15% per rank) × health × morale × the defender's terrain (forest +25%, ruins +50%), each side randomly ±15%. Attacker at 1.0× or more wins, 0.7 to 1.0× is repelled with damage on both sides, under 0.7× the attacker is destroyed. Every 2nd kill promotes a unit (max rank 5). Each attack costs bullets. The engage screen shows only an estimate; a scout within 5 tiles sharpens it.
 <h4>Capture, bribes, prisoners</h4>
 Single capture: infantry only, at least 1.6× strength and the target at 60% HP or less. Surround: every open tile around an enemy is blocked and at least 2 enemies are adjacent; infantry are captured, other units destroyed. Bribe cost is 20 × rank × offer (1 to 3×). The odds compare your morale with the target side's: equal is neutral, 50 points ahead gives about ×1.5 success, 50 behind about ×0.5, and backfires get rarer the further ahead you are. Outcomes are defect, surrender, resisted or backfire (a double agent that leaks your mines and flips back after 3 rounds). Interrogating: question (costs money, prisoner lives, shows about half of enemy mines) or force (prisoner dies, shows all mines, −8 morale).
+<h4>Hidden HQ, Information Base, Commandant</h4>
+Neither side can see the other's HQ: you must scout the map to find it (the enemy does the same). The 📡 Information Base (60 materials, 50 money, 3 rounds, one per side) is a backup HQ, an outpost with wide sight, and trains Scouts (15 money, 10 food, max 3). You only lose your command when the HQ AND the Information Base are both gone: then your 👑 Commandant appears near your old HQ. He moves ONE step per turn, and you lose if he is killed, captured, drowned or surrounded. If he survives 10 rounds he escapes and you win. In a freeze he can flee over ice, but when the ice melts he drowns.
+<h4>Heavy Artillery 🎯</h4>
+Only one exists per game, for both sides. An engineer builds it next to himself and it drains 70% of ALL the builder's stock (needs 120 money, 40 food, 60 materials, 30 fuel, 4 bombs). It cannot move. It fires at any tile on the map for 2 bombs, hitting a 2×2 area (70 damage to units, destroys non-HQ buildings, hurts your own units too) and may never hit an HQ. An enemy engineer next to it can sabotage it.
 <h4>Outposts and attrition</h4>
 Units more than 8 tiles from every finished HQ, Supply Base or Barracks do not freeze, but they cost 2.5× upkeep. A deep push without outposts bleeds your stock, so build bases as you advance. The goal card warns you when units are out of range. Buildings can never be built on water, even on ice.
 <h4>Mines, boats, fog, weather</h4>
@@ -157,9 +162,9 @@ const COL={plains:"#8fa77a",forest:"#5d8a5c",urban:"#9a8b7c",mud:"#8b7a55",sea:"
 const GLYPH={forest:"🌲",urban:"▦",mud:"≈",sea:"⚓",ice:"❄"};
 const RES=[["money","💰","Money","Bribes, building, sea travel"],["food","🌾","Food","Every unit eats 1 per round; forests burn extra"],["bullets","🔫","Bullets","Spent on each attack"],["bombs","💣","Bombs","Bomb strikes and mines"],["materials","🧱","Materials","Building; ruins burn them"],["fuel","⛽","Fuel","Mud, vehicles, ships"]];
 const ICON=Object.fromEntries(RES.map(r=>[r[0],r[1]])), fmt=n=>String(Math.round(n*10)/10), TN={plains:"Plains",forest:"Forest 🌲",urban:"Ruins ▦",mud:"Mud ≈",sea:"Sea ⚓",ice:"Ice ❄"};
-const LETTER={infantry:"🪖",armor:"🛡️",destroyer:"🚢",transport:"⛴️",engineer:"🔧",scout:"🔭"};
-const CLS={infantry:"foot",engineer:"foot",scout:"foot",armor:"veh",destroyer:"nav",transport:"amph"};
-const MP={infantry:3,engineer:3,scout:5,armor:4,destroyer:4,transport:4}, RNG={infantry:1,engineer:1,scout:1,armor:2,destroyer:3,transport:1};
+const LETTER={infantry:"🪖",armor:"🛡️",destroyer:"🚢",transport:"⛴️",engineer:"🔧",scout:"🔭",heavy_artillery:"🎯",commandant:"👑"};
+const CLS={infantry:"foot",engineer:"foot",scout:"foot",armor:"veh",destroyer:"nav",transport:"amph",heavy_artillery:"veh",commandant:"foot"};
+const MP={infantry:3,engineer:3,scout:5,armor:4,destroyer:4,transport:4,heavy_artillery:0,commandant:1}, RNG={infantry:1,engineer:1,scout:1,armor:2,destroyer:3,transport:1,heavy_artillery:0,commandant:1};
 const MC={plains:1,forest:2,urban:2,mud:3,sea:1,ice:1};
 const OK={foot:["plains","forest","urban","mud","ice"],veh:["plains","forest","mud","ice"],nav:["sea"],amph:["plains","mud","sea","ice"]};
 /* Tiles the unit can reach in one move (mirrors server rules; ignores resource cost). */
@@ -169,17 +174,19 @@ function reach(u){
     for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){ if(!dx&&!dy) continue; const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue;
       const t=S.grid[ny][nx]; if(!ok.includes(t)) continue;
       if(S.units.some(k=>free(k)&&k.pos[0]===nx&&k.pos[1]===ny)||S.buildings.some(b=>b.type==="wall"&&b.pos[0]===nx&&b.pos[1]===ny)) continue;
-      const nd=d+MC[t]; if(nd>MP[u.type]||nd>=(best[K(nx,ny)]??1e9)) continue; best[K(nx,ny)]=nd; out.add(K(nx,ny)); q.push([nd,nx,ny]); } }
+      const nd=d+(u.type==="commandant"?1:MC[t]); if(nd>MP[u.type]||nd>=(best[K(nx,ny)]??1e9)) continue; best[K(nx,ny)]=nd; out.add(K(nx,ny)); q.push([nd,nx,ny]); } }
   return out;
 }
-const MAXHP={infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60};
+const MAXHP={infantry:100,armor:160,destroyer:180,transport:90,engineer:80,scout:60,heavy_artillery:150,commandant:60};
 const WI={clear:"☀️ Clear",rain:"🌧 Rain",storm:"⛈ Storm",freeze:"❄ Freeze"};
 const SCN_BLURB={skirmish:"Random map: capture or destroy the enemy HQ.",supply_run:"Tutorial: hold 2 supply bases by round 14. Walk infantry onto a base, then press Capture node.",hold_line:"Survive until round 15 against a brutal commander.",lean_war:"You start with half the food. Cut the enemy's supply roads before yours starve."};
 const FRIENDLY={no_actions_left:"No moves left this turn. Press End turn.",not_visible:"You can't see that target (fog).",out_of_range:"Target is out of range.",no_bullets:"Not enough bullets.",cannot_afford:"Not enough resources for that.",illegal_target:"You can't target that.",attacker_frozen:"That unit is frozen: no supplies.",cannot_plant:"Can't plant a mine here.",tile_unsuitable:"Can't plant a mine on this tile.",nothing_found:"No mine found on that tile.",not_your_turn:"It isn't your turn.",
   threshold_not_met:"Capture failed: the target must be infantry at 60% health or less, and you need 1.6× its strength.",cannot_bomb:"Can't bomb: no bombs left.",no_such_mine:"There's no mine of yours on that tile.",
   cannot_defuse:"Only an unfrozen engineer can defuse, and the tile must be next to it.",bad_request:"That action isn't allowed right now.",unknown_action:"Unknown action.",
   capture_node:"Capture failed: infantry must stand on an enemy or neutral building.",build:"Can't build there: not enough resources, or the tile is taken.",
-  load:"Can't board: the boat must be adjacent, have room, and neither can be frozen.",unload:"Can't unload there: pick a free land tile next to the boat.",surround:"Nobody is surrounded right now."};
+  load:"Can't board: the boat must be adjacent, have room, and neither can be frozen.",unload:"Can't unload there: pick a free land tile next to the boat.",surround:"Nobody is surrounded right now.",
+  fire:"Can't fire: needs 2 bombs, an unfrozen Heavy Artillery, and the 2×2 blast must not include an HQ.",build_ha:"Can't build Heavy Artillery: only one can exist in the whole game, you need 120💰 40🌾 60🧱 30⛽ 4💥, an engineer next to a free land tile.",
+  sabotage:"Sabotage needs your engineer right next to an ENEMY Heavy Artillery.",train_scout:"Can't train a scout: needs a finished Information Base, 15💰 10🌾, a free tile next to it, and under 3 scouts."};
 const STOP={blocked:"That tile is blocked.",out_of_mp:"Out of movement points.",cannot_afford:"Not enough resources to enter that terrain.",no_path:"No path to that tile.",frozen:"That unit is frozen (no supplies).",embarked:"That unit is aboard a boat.",no_actions_left:FRIENDLY.no_actions_left,not_adjacent:"Move tile by tile."};
 let S=null,ST=null,SIG=null,sel=null,mode="move",unloadId=null,busy=false,hover=null,startRes=null,REPLAY={initial:null,actions:[]},lastAction=null,flashT=null;
 const cv=$("cv"),ctx=cv.getContext("2d");
@@ -215,7 +222,7 @@ function logEvent(e){
   gacha_roll:[`🎰 Bribe result: ${e.tier.replace(/_/g," ")} (cost ${e.cost})`],payday:[`💰 Payday (${e.side}): supply ×${e.supply_mult.toFixed(2)}, morale ×${e.moral_mult.toFixed(2)}${e.suppressed?" — capped by low morale":""}${e.disconnected?` — ${e.disconnected} base(s) cut off`:""}`],
   unit_captured:[`⛓ Unit #${e.unit} captured`],building_captured:[`🏴 ${e.btype.replace("_"," ")} captured by ${e.owner}`,e.owner==="player"?"good":"crit"],build_finished:[`🏗 ${e.btype.replace("_"," ")} finished`],
   double_agent_revealed:[`🕵 Double agent #${e.unit} revealed!`,"crit"],interrogated:[`🔎 ${e.mode} interrogation: ${e.revealed.length} mines revealed`],armory_overflow:[`📦 Armory full: ammo lost`],
-  unit_killed:[`☠ ${e.owner} unit #${e.unit} lost (${e.cause.replace(/_/g," ")})`,e.owner==="player"?"crit":""],game_over:[`🏁 ${e.winner} wins`,"good"],weather_changed:[`🌦 Weather: ${e.weather}`],
+  unit_killed:[`☠ ${e.owner} unit #${e.unit} lost (${e.cause.replace(/_/g," ")})`,e.owner==="player"?"crit":""],game_over:[`🏁 ${e.winner} wins`,"good"],weather_changed:[`🌦 Weather: ${e.weather}`],artillery_fired:[`🎯 Artillery strike at (${e.pos})`,"crit"],artillery_built:[`🎯 ${e.owner} built the Heavy Artillery`,"crit"],building_destroyed:[`💥 ${e.btype.replace("_"," ")} destroyed`],ice_thaw_drown:[`🧊 Unit #${e.unit} drowned when the ice melted`,e.owner==="player"?"crit":""],commandant_appears:[`👑 ${e.owner==="player"?"Your":"The enemy"} Commandant appears (survive until round ${e.deadline})`,e.owner==="player"?"crit":"good"],
   mine_defused:[`🔧 Mine defused`],promoted:[`⭐ Unit #${e.unit} promoted to rank ${e.rank}`,"good"],unit_loaded:[`🚢 Unit #${e.unit} boarded`],unit_unloaded:[`🏖 Unit #${e.unit} landed`],conscripted:[`📯 ${e.side} drafted a recruit at its HQ`]}[e.type];
   if(m) log(...m);
 }
@@ -224,7 +231,7 @@ function render(noUI){
   const H=S.grid.length,W=S.grid[0].length, dpr=window.devicePixelRatio||1, [vw,vh]=viewSize();
   if(cv.width!==Math.round(vw*dpr)||cv.height!==Math.round(vh*dpr)){ cv.width=Math.round(vw*dpr); cv.height=Math.round(vh*dpr); cv.style.width=vw+"px"; cv.style.height=vh+"px"; }
   if(!cam.on){ cam.on=true; cam.z=.9; const h=S.buildings.find(b=>b.type==="hq"&&b.owner==="player"); if(h) centerOn(h.pos[0],h.pos[1]); }
-  clampCam(); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.globalAlpha=1; ctx.lineWidth=1; ctx.setLineDash([]); ctx.fillStyle="#1a2330"; ctx.fillRect(0,0,vw,vh);
+  clampCam(); $("zlabel").textContent=Math.round(cam.z*100)+"%"; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.globalAlpha=1; ctx.lineWidth=1; ctx.setLineDash([]); ctx.fillStyle="#1a2330"; ctx.fillRect(0,0,vw,vh);
   ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,-cam.x*dpr*cam.z,-cam.y*dpr*cam.z);
   ctx.textAlign="center"; ctx.textBaseline="middle";
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -233,7 +240,7 @@ function render(noUI){
     if(GLYPH[t]){ ctx.globalAlpha=.55; ctx.font="14px sans-serif"; ctx.fillStyle="#fff"; ctx.fillText(GLYPH[t],x*T+T/2,y*T+T/2); ctx.globalAlpha=1; }
   }
   S.buildings.forEach(b=>{
-    const [x,y]=b.pos, icon={hq:"🏛",supply_base:"📦",barracks:"⛺",wall:"🧱"}[b.type];
+    const [x,y]=b.pos, icon={hq:"🏛",supply_base:"📦",barracks:"⛺",wall:"🧱",info_base:"📡"}[b.type];
     ctx.fillStyle="rgba(255,255,255,.55)"; ctx.fillRect(x*T+3,y*T+3,T-6,T-6);
     ctx.lineWidth=3; ctx.strokeStyle=b.owner==="player"?"#2f6fe4":b.owner==="ai"?"#d64541":"#fff"; ctx.strokeRect(x*T+3,y*T+3,T-6,T-6); ctx.lineWidth=1;
     ctx.font="16px sans-serif"; ctx.fillStyle="#000"; ctx.fillText(icon,x*T+T/2,y*T+T/2+1);
@@ -264,6 +271,7 @@ function render(noUI){
   if(hover){ ctx.lineWidth=2; ctx.strokeStyle="#fff"; ctx.strokeRect(hover[0]*T+1,hover[1]*T+1,T-2,T-2); ctx.lineWidth=1;
     if(V&&V.has(hover[0]+","+hover[1])){ ctx.globalAlpha=.75; ctx.font="18px sans-serif"; ctx.fillStyle="#000"; ctx.fillText(MODE_ICON[mode],hover[0]*T+T/2,hover[1]*T+T/2); ctx.globalAlpha=1; } }
   if(MV&&hover&&su&&mode==="move"&&MV.x===hover[0]&&MV.y===hover[1]) drawMove(su);
+  if(mode==="fire"&&hover&&!REPLAYING){ ctx.fillStyle="rgba(255,45,45,.35)"; for(let i=0;i<2;i++)for(let j=0;j<2;j++) ctx.fillRect((hover[0]+i)*T,(hover[1]+j)*T,T,T); ctx.strokeStyle="#ff2d2d"; ctx.lineWidth=3; ctx.strokeRect(hover[0]*T,hover[1]*T,2*T,2*T); ctx.lineWidth=1; }
   const now=performance.now(), calm=matchMedia("(prefers-reduced-motion: reduce)").matches;
   PINGS.forEach(p=>{ const a=(now-p.t)/1400; ctx.strokeStyle=p.color; ctx.globalAlpha=Math.max(0,1-a*.8); ctx.lineWidth=4; ctx.beginPath(); ctx.arc(p.x*T+T/2,p.y*T+T/2,calm?T*.6:T*(.4+a*1.2),0,7); ctx.stroke(); ctx.globalAlpha=1; ctx.lineWidth=1; });
   if(!noUI) ui();
@@ -273,7 +281,7 @@ function render(noUI){
 let PINGS=[],animOn=false,AC=null,MUTE=localStorage.getItem("warchess.mute")==="1";
 const OUT={attacker_wins:["⚔ Attack won: enemy unit destroyed","good"],repelled:["⚔ Attack repelled: both units damaged, none destroyed","warn"],attacker_loses:["⚔ Attack failed: your unit was destroyed","bad"],
   auto_win_destroyed:["⚡ Bankrupt unit destroyed","good"],auto_win_captured:["⚡ Bankrupt unit captured","good"],captured:["⛓ Unit captured","good"],captured_vulnerable:["⛓ Unit captured","good"],
-  SSR_DEFECTION:["🎰 Defected! The unit joins you","good"],SR_SURRENDER:["🎰 The unit surrendered","good"],R_RESISTED:["🎰 Bribe resisted: money lost","bad"],SSR_BACKFIRE:["🎰 Backfire: a double agent that leaks your mines","bad"],detonated:["💥 Mine detonated","warn"]};
+  SSR_DEFECTION:["🎰 Defected! The unit joins you","good"],SR_SURRENDER:["🎰 The unit surrendered","good"],R_RESISTED:["🎰 Bribe resisted: money lost","bad"],SSR_BACKFIRE:["🎰 Backfire: a double agent that leaks your mines","bad"],detonated:["💥 Mine detonated","warn"],fire:["🎯 Artillery strike!","good"],build_ha:["🎯 Heavy Artillery built: most of your stock is gone","warn"],sabotage:["🔧 Heavy Artillery sabotaged","good"],train_scout:["🔭 Scout trained","good"]};
 const COLOR={good:"#2d8a57",bad:"#ff2d2d",warn:"#f2b705"};
 function beep(kind){ if(MUTE) return; try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type="square"; o.frequency.value=kind==="bad"?180:300; g.gain.value=.05; o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+.13); }catch(e){} }
 function toast(msg,kind){ const d=document.createElement("div"); d.className="toast "+(kind||"warn"); d.textContent=msg; const b=$("toasts"); b.appendChild(d); while(b.children.length>3) b.firstChild.remove(); setTimeout(()=>d.remove(),4500); if(kind!=="good") beep(kind); }
@@ -317,11 +325,11 @@ function drawMove(u){
   tip(m.x,m.y,out,!!m.stopped);
 }
 
-const MODE_LABEL={wall:"wall",supply_base:"supply base",barracks:"barracks",defuse:"mine check",unload:"landing"};
-const MODE_ICON={wall:"🧱",supply_base:"📦",barracks:"⛺",defuse:"🔧",unload:"🏖"};
+const MODE_LABEL={info_base:"information base",ha:"heavy artillery",fire:"artillery",wall:"wall",supply_base:"supply base",barracks:"barracks",defuse:"mine check",unload:"landing"};
+const MODE_ICON={info_base:"📡",ha:"🎯",fire:"🎯",wall:"🧱",supply_base:"📦",barracks:"⛺",defuse:"🔧",unload:"🏖"};
 /* Tiles where the current placement mode can be used (mirrors the server rules). null = not a placement mode. */
 function validTiles(){
-  if(!S||!["wall","supply_base","barracks","defuse","unload"].includes(mode)) return null;
+  if(!S||!["wall","supply_base","barracks","info_base","ha","defuse","unload"].includes(mode)) return null;
   const u=S.units.find(x=>x.id===sel); if(!u) return null;
   const out=new Set(), H=S.grid.length, W=S.grid[0].length;
   const occ=(x,y)=>S.units.some(k=>free(k)&&k.pos[0]===x&&k.pos[1]===y);
@@ -355,7 +363,7 @@ function ui(){
   $("cancel").style.display=mode!=="move"?"inline-block":"none";
   const eb=$("endturn"); eb.disabled=over; eb.className=left===0&&mineTurn?"ready":""; eb.textContent=over?"Game over":left===0?"End turn ▶ (no moves left)":"End turn";
   const o=S.objective;
-  $("mission").innerHTML=`<h3>${over?(S.winner==="player"?"🏆 Victory":"💀 Defeat"):"Your goal"}</h3>${o?(o.type==="survive"?`Survive until round ${o.rounds}.`:`Hold ${o.count} supply bases by round ${o.rounds}.`):"Capture or destroy the enemy HQ 🏛."}
+  $("mission").innerHTML=`<h3>${over?(S.winner==="player"?"🏆 Victory":"💀 Defeat"):"Your goal"}</h3>${o?(o.type==="survive"?`Survive until round ${o.rounds}.`:`Hold ${o.count} supply bases by round ${o.rounds}.`):"Find and destroy the enemy HQ 🏛. It is hidden: scout the map to locate it. If your HQ and Information Base both fall, your Commandant 👑 appears and must survive."}
     <div class="small" style="margin-top:6px">Supply roads connected: <b>${S.supplyConnected}/${S.supplyTotal}</b> bases (up to ${S.supplyUseful} count at your morale) · Enemy commander: ${S.aiPersona}</div>`;
   const band=me.moral<25?"Broken":me.moral<50?"Shaken":me.moral<75?"Steady":"High";
   $("moralfill").style.width=me.moral+"%"; $("moralfill").style.background=me.moral<30?"var(--bad)":me.moral<50?"var(--warn)":"var(--ok)";
@@ -368,6 +376,8 @@ function ui(){
   else if(S.supplyConnected>S.supplyUseful) w.push(["warnc",`Only ${S.supplyUseful} of your ${S.supplyConnected} connected bases pay out at this morale. Raise morale to use the rest.`]);
   if(S.attritionUnits>0) w.push(["warnc",`${S.attritionUnits} of your units are far from any outpost (HQ, Supply Base, Barracks): their upkeep costs 2.5×. Build an outpost closer to the front.`]);
   if(S.weather==="freeze"&&S.units.some(u=>mine(u)&&free(u)&&S.grid[u.pos[1]][u.pos[0]]==="ice")) w.push(["crit","❄ Your units are standing on ice. When the cold ends the ice melts and they drown!"]);
+  if(S.chase&&S.chase.you) w.push(["crit",`👑 Your HQ and Information Base are gone. Keep your Commandant alive and unsurrounded until round ${S.chase.you}. He moves one step per turn.`]);
+  if(S.chase&&S.chase.enemy) w.push(["good",`👑 The enemy Commandant is on the run. Find and surround him before round ${S.chase.enemy}.`]);
   if(frozen) w.push(["crit",`${frozen} frozen unit(s): any enemy with supplies beats them instantly.`]);
   $("warns").innerHTML=w.length?w.map(([c,t])=>`<div class="${c}">• ${t}</div>`).join(""):"<span class='good'>All clear</span>";
   $("pris").innerHTML=S.prisoners.length?S.prisoners.map(p=>`#${p.id} ${p.type}<div class="row"><button data-a="interrogate" data-id="${p.id}" data-mode="resource" title="Costs money, prisoner lives">Question (costs money)</button><button data-a="interrogate" data-id="${p.id}" data-mode="force" title="Prisoner dies, −8 morale">Force (−8 morale)</button><button data-a="release" data-id="${p.id}" title="+1.5 morale">Release</button></div>`).join("<hr>"):"None";
@@ -379,16 +389,18 @@ function unitCard(){
   if(!u||!mine(u)){ $("sel").innerHTML="Click one of your <b style='color:var(--me)'>blue circles</b> on the map."; A.innerHTML=""; return; }
   $("sel").innerHTML=`<b>${u.type[0].toUpperCase()+u.type.slice(1)} #${u.id}</b> ${"★".repeat(u.rank)}<br>HP ${u.hp}/${MAXHP[u.type]} · ${u.kills||0} kills${u.frozen?"<br><span class='crit'>Frozen: no supplies, can't move.</span>":""}`;
   const aff=c=>Object.entries(c).every(([k,v])=>res[k]>=v), B=(lbl,a,ok,tip,extra="")=>`<button data-a="${a}" class="${a===mode?"on":""}" ${ok&&can?"":"disabled"} title="${tip}" ${extra}>${lbl}</button>`;
+  if(u.type==="heavy_artillery"){ A.innerHTML=`<div class="small" style="margin-top:8px">Heavy Artillery: immobile, whole-map range, 2×2 blast</div><div class="row">`+B("🎯 Fire · 2💥","fire",aff({bombs:2})&&!u.frozen,"Then click any tile. Cannot target an HQ. Hits your own units too.")+`</div>`; return; }
+  const eha=S.units.find(k=>!mine(k)&&free(k)&&k.type==="heavy_artillery"&&Math.max(Math.abs(k.pos[0]-u.pos[0]),Math.abs(k.pos[1]-u.pos[1]))<=1), haLive=S.units.some(k=>k.type==="heavy_artillery"), myBase=S.buildings.some(b=>b.type==="info_base"&&b.owner==="player"&&!b.turnsLeft);
   const tr=S.units.find(k=>mine(k)&&k.type==="transport"&&Math.max(Math.abs(k.pos[0]-u.pos[0]),Math.abs(k.pos[1]-u.pos[1]))<=1);
   let h=`<div class="small" style="margin-top:8px">Unit actions (1 move each)</div><div class="row">`
    +B("💣 Plant mine","plant",!u.frozen&&aff({bombs:1,materials:2}),"Costs 1 bomb + 2 materials. Hidden. Kills everyone on the tile when detonated.")
    +B("🏴 Capture node","capture_node",u.type==="infantry"&&!u.frozen,"Infantry only, standing on a base, HQ or building")
-   +(u.type==="engineer"?B("🔧 Defuse","defuse",!u.frozen,"Then click an adjacent tile"):"")
+   +(u.type==="engineer"?B("🔧 Defuse","defuse",!u.frozen,"Then click an adjacent tile")+B("🎯 Build Heavy Artillery","ha",!u.frozen&&!haLive&&aff({money:120,food:40,materials:60,fuel:30,bombs:4}),"Only ONE exists per game (both sides). Drains 70% of ALL your stock. Needs 120💰 40🌾 60🧱 30⛽ 4💥. Then click an adjacent tile")+(eha?B("🔧 Sabotage artillery","sabotage",!u.frozen,"Destroys the enemy Heavy Artillery next to you",`data-t="${eha.id}"`):""):"")
    +(tr&&["infantry","engineer","scout"].includes(u.type)?B(`🚢 Board #${tr.id}`,"board",!u.frozen,"Boat must be adjacent and have room",`data-tr="${tr.id}"`):"")
    +(u.type==="transport"?S.units.filter(k=>k.carrier===u.id).map(k=>B(`🏖 Unload #${k.id}`,"unload",true,"Then click an adjacent land tile",`data-k="${k.id}"`)).join(""):"")
    +`</div><div class="small" style="margin-top:8px">Build next to this unit: pick one, then click a green tile</div><div class="row">`
-   +B("Wall · 10🧱","wall",aff({materials:10}),"Blocks movement")+B("Supply base · 40🧱 30💰","supply_base",aff({materials:40,money:30}),"Takes 3 rounds; pays at payday if connected to HQ")+B("Barracks · 35🧱 20💰","barracks",aff({materials:35,money:20}),"Free infantry each payday, but lowers the armory cap")
-   +`</div><div class="small" style="margin-top:8px">Army-wide</div><div class="row">`+B("⭕ Capture surrounded","surround",true,"Captures enemy infantry you have completely surrounded")+B("💥 Bomb a tile","bomb",aff({bombs:1}),"Click any tile. Hits an area, destroys walls, can hit your own units")+`</div>`;
+   +B("Wall · 10🧱","wall",aff({materials:10}),"Blocks movement")+B("Supply base · 40🧱 30💰","supply_base",aff({materials:40,money:30}),"Takes 3 rounds; pays at payday if connected to HQ")+B("Barracks · 35🧱 20💰","barracks",aff({materials:35,money:20}),"Free infantry each payday, but lowers the armory cap")+B("Info Base · 60🧱 50💰","info_base",aff({materials:60,money:50})&&!S.buildings.some(b=>b.type==="info_base"&&b.owner==="player"),"Backup HQ (you only lose your command when HQ AND Info Base are gone), outpost, wider sight, trains scouts. Max 1. Takes 3 rounds")
+   +`</div><div class="small" style="margin-top:8px">Army-wide</div><div class="row">`+B("🔭 Train scout · 15💰 10🌾","train_scout",myBase&&aff({money:15,food:10}),"Needs a finished Information Base. Max 3 scouts")+B("⭕ Capture surrounded","surround",true,"Captures enemy infantry you have completely surrounded")+B("💥 Bomb a tile","bomb",aff({bombs:1}),"Click any tile. Hits an area, destroys walls, can hit your own units")+`</div>`;
   A.innerHTML=h;
 }
 
@@ -396,7 +408,7 @@ function hint(){
   const h=$("hint"); if(h.className==="warn") return;
   const u=S.units.find(x=>x.id===sel);
   h.textContent=S.winner?(S.winner==="player"?"Victory! Start a new game from the top bar.":"Defeat. Start a new game from the top bar."):S.active!=="player"?"Enemy is moving…"
-   :mode==="bomb"?"Click the tile to bomb. Nearby units, even yours, take damage.":mode==="defuse"?"Step 2 of 2: click a green tile to check it for a mine (Esc cancels).":mode==="unload"?"Step 2 of 2: click a green land tile to unload (Esc cancels).":["wall","supply_base","barracks"].includes(mode)?`Step 2 of 2: click a green tile to build the ${MODE_LABEL[mode]} (Esc cancels).`:
+   :mode==="fire"?"Click any tile: the Heavy Artillery hits a 2×2 area anywhere on the map. It cannot target an HQ (Esc cancels).":mode==="bomb"?"Click the tile to bomb. Nearby units, even yours, take damage.":mode==="defuse"?"Step 2 of 2: click a green tile to check it for a mine (Esc cancels).":mode==="unload"?"Step 2 of 2: click a green land tile to unload (Esc cancels).":["wall","supply_base","barracks","info_base","ha"].includes(mode)?`Step 2 of 2: click a green tile to build the ${MODE_LABEL[mode]} (Esc cancels).`:
    S.actionsLeft===0?"No moves left. Press End turn.":u&&mine(u)?(u.frozen?"This unit is frozen (no supplies). Pick another.":"Blue tiles = where this unit can move. Click one to go (hover any tile to see what it costs). Red box = enemy in range: click it to attack, capture or bribe."):`Pick a unit. You have ${S.actionsLeft} moves this turn.`;
 }
 
@@ -448,7 +460,9 @@ cv.addEventListener("click",ev=>{
   if(mode==="unload"){ mode="move"; return act({type:"unload",unit:unloadId,x,y}); }
   if(mode==="defuse"){ mode="move"; return sel?act({type:"defuse",unit:sel,x,y}):ui(); }
   if(mode==="bomb"){ mode="move"; return act({type:"bomb",x,y}); }
-  if(["wall","supply_base","barracks"].includes(mode)){ const b=mode; mode="move"; return sel?act({type:"build",unit:sel,btype:b,x,y}):ui(); }
+  if(mode==="fire"){ mode="move"; return sel?act({type:"fire",unit:sel,x,y}):ui(); }
+  if(mode==="ha"){ mode="move"; return sel?act({type:"build_ha",unit:sel,x,y}):ui(); }
+  if(["wall","supply_base","barracks","info_base","ha"].includes(mode)){ const b=mode; mode="move"; return sel?act({type:"build",unit:sel,btype:b,x,y}):ui(); }
   if(clicked&&mine(clicked)){ sel=clicked.id; return render(); }
   if(mn&&confirm("Detonate this mine? It kills EVERY unit on the tile, including yours.")) return act({type:"detonate",x,y});
   if(!sel) return flash("Select one of your units first.");
@@ -468,9 +482,11 @@ document.addEventListener("click",ev=>{
   const b=ev.target.closest("button[data-a]"); if(REPLAYING||!b||b.disabled) return; const d=b.dataset;
   if(d.a==="plant"||d.a==="capture_node") act({type:d.a,unit:sel});
   else if(d.a==="surround") act({type:"surround",unit:sel});
+  else if(d.a==="sabotage") act({type:"sabotage",unit:sel,target:+d.t});
+  else if(d.a==="train_scout") act({type:"train_scout"});
   else if(d.a==="board") act({type:"load",unit:sel,target:+d.tr});
   else if(d.a==="unload"){ unloadId=+d.k; setMode("unload"); }
-  else if(["defuse","wall","supply_base","barracks","bomb"].includes(d.a)) setMode(d.a);
+  else if(["defuse","wall","supply_base","barracks","info_base","ha","fire","bomb"].includes(d.a)) setMode(d.a);
   else if(d.a==="interrogate") act({type:"interrogate",target:+d.id,mode:d.mode});
   else if(d.a==="release") act({type:"release",target:+d.id});
 });
@@ -491,7 +507,7 @@ async function enemyMenu(t){
 
 /* ---- Replay player: re-runs the recorded actions on the server from the saved, signed start state ---- */
 let REPLAYING=false,RP=null;
-const rpLabel=a=>({move:`Move #${a.unit} to (${a.x},${a.y})`,attack:`Attack #${a.target} with #${a.unit}`,capture_unit:`Capture #${a.target}`,bribe:`Bribe #${a.target} (${a.offer}×)`,bomb:`Bomb (${a.x},${a.y})`,plant:`Plant mine #${a.unit}`,detonate:`Detonate (${a.x},${a.y})`,defuse:`Defuse (${a.x},${a.y})`,load:`Board #${a.unit}`,unload:`Unload #${a.unit}`,build:`Build ${a.btype}`,capture_node:`Capture node #${a.unit}`,surround:"Capture surrounded",interrogate:`Interrogate #${a.target} (${a.mode})`,release:`Release #${a.target}`,end_turn:"End turn (enemy plays)"}[a.type]||String(a.type));
+const rpLabel=a=>({move:`Move #${a.unit} to (${a.x},${a.y})`,attack:`Attack #${a.target} with #${a.unit}`,capture_unit:`Capture #${a.target}`,bribe:`Bribe #${a.target} (${a.offer}×)`,bomb:`Bomb (${a.x},${a.y})`,plant:`Plant mine #${a.unit}`,detonate:`Detonate (${a.x},${a.y})`,defuse:`Defuse (${a.x},${a.y})`,load:`Board #${a.unit}`,unload:`Unload #${a.unit}`,build:`Build ${a.btype}`,capture_node:`Capture node #${a.unit}`,surround:"Capture surrounded",interrogate:`Interrogate #${a.target} (${a.mode})`,release:`Release #${a.target}`,fire:`Artillery fires at (${a.x},${a.y})`,build_ha:"Build Heavy Artillery",sabotage:`Sabotage #${a.target}`,train_scout:"Train scout",end_turn:"End turn (enemy plays)"}[a.type]||String(a.type));
 function rbarUpdate(){ const n=RP.actions.length,i=RP.idx;
   $("rtxt").textContent=`▶ Replay · step ${i} of ${n} · Round ${S.round}`+(i>0?` · ${rpLabel(RP.actions[i-1])}`:" · start")+(i===n?" · 🏁 end of replay":"");
   $("rfirst").disabled=$("rback").disabled=i===0; $("rnext").disabled=i>=n; $("rplay").textContent=RP.timer?"⏸ Pause":"▶ Play"; }

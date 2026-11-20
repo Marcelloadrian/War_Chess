@@ -13,14 +13,16 @@ Hardcore grand-tactical turn-based wargame. **Semua aturan berlaku simetris untu
 | 2 | Hujan: Land jadi Mud | ✅ |
 | 2 | Freeze: SEA jadi Ice, bisa dilewati unit darat | ✅ |
 | 2 | Es mencair: semua unit darat di atasnya tenggelam | ✅ |
-| 2 | Ice Trap untuk Commandant (instant defeat) | ⏳ butuh unit Commandant |
+| 2 | Ice Trap untuk Commandant (instant defeat) | ✅ |
 | 3 | Research Building, batas 1 Engineer | ⏳ |
 | 4 | Ship + Dock (hanya SEA, Dock di pesisir) | ⏳ (Destroyer/Transport sudah ada, belum lewat Dock) |
-| 5 | Information Base, Scout, Agent "nyomot infanteri", defection | ⏳ |
-| 6 | Heavy Artillery (1 per game, immobile, global, 2x2, bukan HQ) | ⏳ |
+| 5 | Information Base (HQ cadangan, outpost, latih Scout) | ✅ |
+| 5 | Agent "nyomot infanteri", defection | ⏳ |
+| 6 | Heavy Artillery (1 per game, immobile, global, 2x2, bukan HQ, sabotase Engineer) | ✅ |
 | 7 | Fog of war dinamis, moral | ✅ sebagian (vision unit/HQ/Scout, moral ada) |
 | 7 | Desersi infanteri low-moral, veteran bocor/gampang disuap | ⏳ (bribe by rank sudah ada) |
-| 8 | Commandant Chase (HQ + Info Base hancur) | ⏳ |
+| 8 | Commandant Chase (HQ + Info Base hancur) | ✅ |
+| 8 | HQ tersembunyi (kedua pihak harus saling mencari, AI ikut mencari) | ✅ |
 | - | Modal Victory/Defeat, simpan dan putar replay | ✅ |
 
 ## 2. Peta dan kamera
@@ -46,3 +48,10 @@ Starting stock, trickle tiap ronde (tanpa pengaruh base), payday tiap 5 ronde de
 
 ## 7. Arsitektur
 `engine.py` (state, aturan, cuaca, attrition), `combat.py`, `ai.py` (aturan sama dengan pemain), `mapgen.py`, `scenarios.py`, `server.py` (stateless + HMAC). Replay = start state bertanda tangan + daftar aksi, diputar ulang di server (RNG deterministik). `RULES_VERSION = 8`.
+
+## 8. Update v8.1: HQ tersembunyi, Information Base, Heavy Artillery, Commandant
+* **HQ tersembunyi**: HQ dan Info Base lawan tidak tampil di peta sampai terlihat oleh unit (lalu diingat). AI tunduk aturan yang sama: ia hanya tahu HQ setelah melihatnya, jika belum ia menjelajah sel 8x8 terdekat yang belum dikunjungi (`search_target`).
+* **Information Base** (60 material, 50 money, 3 ronde, 1 per sisi): HQ cadangan, outpost, sight 4, latih Scout (15 money, 10 food, maks 3).
+* **Heavy Artillery**: 1 per game (kedua pihak), dibuat Engineer, menguras 70% semua stok (syarat 120 money, 40 food, 60 material, 30 fuel, 4 bomb), mp 0, tembak ke tile mana saja (2 bomb), blast 2x2, 70 damage ke unit, menghancurkan bangunan non-HQ, tidak boleh mengenai HQ. Engineer musuh di sebelahnya bisa sabotase.
+* **Commandant Chase**: HQ dan Info Base habis, Commandant muncul dekat HQ awal, 1 langkah per giliran. Kalah jika terbunuh, ditawan, tenggelam saat es mencair, atau dikepung. Jika bertahan `CHASE_TURNS = 10` ronde, ia kabur dan sisinya menang.
+* Belum: Research Building + batas Engineer, Dock + Ship, Agent "nyomot infanteri", desersi infanteri moral rendah, veteran bocor/gampang disuap.

@@ -77,6 +77,8 @@ class UnitType(str, Enum):
     ARMOR = "armor"
     DESTROYER = "destroyer"
     TRANSPORT = "transport"
+    HEAVY_ARTILLERY = "heavy_artillery"   # ONE per game, immobile, whole-map range, 2x2 blast
+    COMMANDANT = "commandant"             # appears when HQ and Information Base are both gone
 
 
 class BuildingType(str, Enum):
@@ -84,9 +86,14 @@ class BuildingType(str, Enum):
     SUPPLY_BASE = "supply_base"
     BARRACKS = "barracks"
     HQ = "hq"
+    INFO_BASE = "info_base"               # backup HQ, outpost, trains scouts
 
 
-OUTPOST_TYPES = frozenset({BuildingType.HQ, BuildingType.SUPPLY_BASE, BuildingType.BARRACKS})
+OUTPOST_TYPES = frozenset({BuildingType.HQ, BuildingType.SUPPLY_BASE, BuildingType.BARRACKS, BuildingType.INFO_BASE})
+CHASE_TURNS = 10               # rounds the Commandant must survive (he moves 1 step per turn)
+HA_DRAIN, HA_DAMAGE, HA_BOMB_COST = 0.7, 70, 2
+HA_MIN_STOCK = {Res.MONEY: 120, Res.FOOD: 40, Res.MATERIALS: 60, Res.FUEL: 30, Res.BOMBS: 4}
+SCOUT_COST, MAX_SCOUTS = {Res.MONEY: 15, Res.FOOD: 10}, 3
 
 # --------------------------------------------------------------------------- #
 # Static data tables (tune here, not in logic)
@@ -161,14 +168,18 @@ UNIT_SPECS: dict[UnitType, UnitSpec] = {
                                 {Res.FOOD: 1.0}, (Res.FOOD,), 0.0),   # can defuse mines
     UnitType.SCOUT: UnitSpec(UnitClass.FOOT, 3, 60, 5, 1, 1,
                              {Res.FOOD: 1.0}, (Res.FOOD,), 0.0, vision=6),
+    UnitType.HEAVY_ARTILLERY: UnitSpec(UnitClass.VEHICLE, 40, 150, 0, 0, 0,
+                                       {Res.FOOD: 1.0, Res.FUEL: 1.0}, (Res.FOOD, Res.FUEL), 0.0),   # mp 0: immobile; fires via fire_artillery
+    UnitType.COMMANDANT: UnitSpec(UnitClass.FOOT, 5, 60, 3, 1, 1, {Res.FOOD: 0.5}, (Res.FOOD,), 0.0, vision=4),
 }
 
 BUILD_COST: dict[BuildingType, dict[Res, float]] = {
     BuildingType.WALL: {Res.MATERIALS: 10},
     BuildingType.SUPPLY_BASE: {Res.MATERIALS: 40, Res.MONEY: 30},
     BuildingType.BARRACKS: {Res.MATERIALS: 35, Res.MONEY: 20},
+    BuildingType.INFO_BASE: {Res.MATERIALS: 60, Res.MONEY: 50},
 }
-BUILD_TURNS = {BuildingType.WALL: 1, BuildingType.SUPPLY_BASE: 3, BuildingType.BARRACKS: 2}
+BUILD_TURNS = {BuildingType.WALL: 1, BuildingType.SUPPLY_BASE: 3, BuildingType.BARRACKS: 2, BuildingType.INFO_BASE: 3}
 
 BASE_START: dict[Res, float] = {
     Res.MONEY: 200, Res.FOOD: 110, Res.BULLETS: 80,
@@ -304,6 +315,7 @@ class GameState:
         self.weather = Weather.CLEAR
         self.objective: Optional[dict] = None     # scenario objective
         self.scenario = "skirmish"
+        self.meta: dict = {"found": [], "explored": {"player": {}, "ai": {}}, "home": {}, "chase": {}}   # hidden-HQ search + chase state (JSON-safe)
         self.persona = {Side.PLAYER: "balanced", Side.AI: "balanced"}
         self.actions_used = {Side.PLAYER: 0, Side.AI: 0}
         self.units: dict[int, Unit] = {}
@@ -478,6 +490,8 @@ class GameState:
         """Walk `path` (excluding the start tile). Stops at the first illegal
         or unaffordable step. Never moves frozen units."""
         u = self.units[unit_id]
+        if u.type is UnitType.COMMANDANT:
+            path = path[:1]                       # the Commandant creeps: one step per turn
         if self.winner or u.owner is not self.active:
             return {"moved": 0, "stopped": "not_your_turn"}
         if u.frozen:
@@ -576,7 +590,7 @@ class GameState:
     # ---- fog of war ---------------------------------------------------------- #
     def _sight_sources(self, side: Side) -> list[tuple[Coord, int]]:
         src = [(u.pos, u.spec.vision) for u in self.units.values() if u.owner is side and u.carrier is None]
-        src += [(b.pos, 4 if b.type is BuildingType.HQ else 3) for b in self.buildings.values()
+        src += [(b.pos, 4 if b.type in (BuildingType.HQ, BuildingType.INFO_BASE) else 3) for b in self.buildings.values()
                 if b.owner is side and b.active and b.type is not BuildingType.WALL]
         return src
 
@@ -639,6 +653,8 @@ class GameState:
             return False
         if max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) > 1:
             return False
+        if btype is BuildingType.INFO_BASE and any(b.type is btype and b.owner is u.owner for b in self.buildings.values()):
+            return False                      # one Information Base per side
         if (not self.in_bounds(c) or c in self.buildings or self.unit_at(c)
                 or self.grid[c[1]][c[0]] is Terrain.SEA):      # never on water (ice does not count as land)
             return False
@@ -786,8 +802,7 @@ class GameState:
     def connected_supply_bases(self, side: Side) -> list[Coord]:
         """Supply bases reachable from own HQ over land. Enemy units and the tiles
         next to them (zone of control), plus enemy buildings, cut the road."""
-        hq = next((b.pos for b in self.buildings.values()
-                   if b.type is BuildingType.HQ and b.owner is side), None)
+        hq = self.command_pos(side)            # HQ, or the Information Base once the HQ is gone
         if not hq:
             return []
         mine = {u.pos for u in self.units.values() if u.owner is side}
@@ -824,13 +839,137 @@ class GameState:
             self.spawn_unit(side, UnitType.INFANTRY, spot)
             self.emit("conscripted", side=side.value, pos=spot)
 
+    # ---- command post, hidden HQ, Information Base, Heavy Artillery, Commandant chase ---- #
+    def command_pos(self, side: Side):
+        for t in (BuildingType.HQ, BuildingType.INFO_BASE):
+            b = next((b for b in self.buildings.values() if b.owner is side and b.type is t and b.active), None)
+            if b:
+                return b.pos
+        return None
+
+    def update_discovery(self, side: Side, vis=None) -> None:
+        """Remember explored map cells and whether this side has FOUND the enemy HQ (it is hidden on the map)."""
+        vis = vis if vis is not None else self.visible_tiles(side)
+        ex = self.meta["explored"][side.value]
+        for (x, y) in vis:
+            ex[f"{x // 8},{y // 8}"] = 1
+        hq = next((b.pos for b in self.buildings.values() if b.type is BuildingType.HQ and b.owner is side.other), None)
+        if hq in vis and side.value not in self.meta["found"]:
+            self.meta["found"].append(side.value)
+
+    def search_target(self, side: Side):
+        """Where a side that has not found the enemy HQ looks next: the nearest unexplored land cell."""
+        ex, home = self.meta["explored"][side.value], self.command_pos(side) or (self.w // 2, self.h // 2)
+        cells = [(min(cx * 8 + 4, self.w - 1), min(cy * 8 + 4, self.h - 1)) for cx in range((self.w + 7) // 8)
+                 for cy in range((self.h + 7) // 8) if f"{cx},{cy}" not in ex]
+        cells = [c for c in cells if self.grid[c[1]][c[0]] is not Terrain.SEA]
+        return min(cells, key=lambda c: max(abs(c[0] - home[0]), abs(c[1] - home[1]))) if cells else None
+
+    def _free_land_near(self, c: Coord, radius: int = 4):
+        for r in range(1, radius + 1):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    n = (c[0] + dx, c[1] + dy)
+                    if (self.in_bounds(n) and not self.unit_at(n) and n not in self.buildings
+                            and self.grid[n[1]][n[0]] in (Terrain.PLAINS, Terrain.FOREST, Terrain.MUD)):
+                        return n
+        return None
+
+    def train_scout(self, side: Side) -> bool:
+        base = next((b for b in self.buildings.values() if b.owner is side and b.active and b.type is BuildingType.INFO_BASE), None)
+        if (side is not self.active or not base or self.actions_left(side) <= 0
+                or sum(1 for u in self.units_of(side) if u.type is UnitType.SCOUT) >= MAX_SCOUTS):
+            return False
+        spot = self._free_land_near(base.pos, 2)
+        if not spot or not self.spend(side, SCOUT_COST):
+            return False
+        self.spawn_unit(side, UnitType.SCOUT, spot); self.use_action(side)
+        return True
+
+    def build_artillery(self, unit_id: int, c: Coord) -> bool:
+        u = self.units.get(unit_id)
+        if (not u or u.type is not UnitType.ENGINEER or u.owner is not self.active or u.frozen or self.actions_left(u.owner) <= 0
+                or any(k.type is UnitType.HEAVY_ARTILLERY for k in self.units.values())          # ONE per game (both sides)
+                or not self.in_bounds(c) or max(abs(c[0] - u.pos[0]), abs(c[1] - u.pos[1])) > 1
+                or self.unit_at(c) or c in self.buildings or self.grid[c[1]][c[0]] is Terrain.SEA
+                or not self.can_afford(u.owner, HA_MIN_STOCK)):
+            return False
+        res = self.factions[u.owner].res
+        for r in Res:
+            res[r] -= res[r] * HA_DRAIN                                                        # drains almost everything
+        self.spawn_unit(u.owner, UnitType.HEAVY_ARTILLERY, c); self.use_action(u.owner)
+        self.emit("artillery_built", owner=u.owner.value, pos=c)
+        return True
+
+    def fire_artillery(self, unit_id: int, c: Coord) -> bool:
+        u = self.units.get(unit_id)
+        if (not u or u.type is not UnitType.HEAVY_ARTILLERY or u.owner is not self.active or u.frozen
+                or self.actions_left(u.owner) <= 0 or not self.in_bounds(c)):
+            return False
+        blast = [(c[0] + dx, c[1] + dy) for dx in (0, 1) for dy in (0, 1) if self.in_bounds((c[0] + dx, c[1] + dy))]
+        if any(b.type is BuildingType.HQ and b.pos in blast for b in self.buildings.values()):
+            return False                                                                       # HQs are off limits
+        if not self.spend(u.owner, {Res.BOMBS: HA_BOMB_COST}):
+            return False
+        self.use_action(u.owner); self.emit("artillery_fired", owner=u.owner.value, pos=c)
+        for t in blast:
+            v = self.unit_at(t)
+            if v and v.carrier is None:
+                v.hp -= HA_DAMAGE
+                if v.hp <= 0:
+                    self.kill_unit(v.id, "artillery")
+            b = self.buildings.get(t)
+            if b and b.type is not BuildingType.HQ:
+                del self.buildings[t]; self.emit("building_destroyed", btype=b.type.value, pos=t)
+        return True
+
+    def sabotage(self, unit_id: int, target_id: int) -> bool:
+        u, t = self.units.get(unit_id), self.units.get(target_id)
+        if (not u or not t or u.type is not UnitType.ENGINEER or t.type is not UnitType.HEAVY_ARTILLERY or t.owner is u.owner
+                or u.owner is not self.active or u.frozen or self.actions_left(u.owner) <= 0
+                or max(abs(u.pos[0] - t.pos[0]), abs(u.pos[1] - t.pos[1])) > 1):
+            return False
+        self.use_action(u.owner); self.kill_unit(t.id, "sabotaged")
+        return True
+
+    def _commandant_surrounded(self, u: Unit) -> bool:
+        foe_adjacent = False
+        for n in self.neighbors8(u.pos):
+            if not self.in_bounds(n):
+                continue
+            o = self.unit_at(n)
+            if o and o.owner is not u.owner:
+                foe_adjacent = True
+            elif self.can_enter(u, n):
+                return False
+        return foe_adjacent
+
     def check_victory(self) -> Optional[Side]:
+        for side in Side:                                              # remember where each HQ started (for the Commandant)
+            if side.value not in self.meta["home"]:
+                h = next((b.pos for b in self.buildings.values() if b.type is BuildingType.HQ and b.owner is side), None)
+                if h:
+                    self.meta["home"][side.value] = list(h)
         for side in Side:
-            has_hq = any(b.type is BuildingType.HQ and b.owner is side
-                         for b in self.buildings.values())
-            if not has_hq and self.winner is None:
-                self.winner = side.other
-                self.emit("game_over", winner=self.winner.value)
+            if self.winner:
+                break
+            cmd = next((u for u in self.units_of(side) if u.type is UnitType.COMMANDANT), None)
+            if cmd is None and side.value in self.meta["chase"]:
+                self.winner = side.other                               # Commandant killed, captured or drowned
+            elif cmd is None and self.command_pos(side) is None:       # HQ and Information Base both gone
+                home = tuple(self.meta["home"].get(side.value, (self.w // 2, self.h // 2)))
+                spot = self._free_land_near(home)
+                if spot:
+                    self.spawn_unit(side, UnitType.COMMANDANT, spot)
+                    self.meta["chase"][side.value] = self.round + CHASE_TURNS
+                    self.emit("commandant_appears", owner=side.value, deadline=self.round + CHASE_TURNS)
+                else:
+                    self.winner = side.other
+            elif cmd is not None:
+                if self._commandant_surrounded(cmd):
+                    self.winner = side.other
+                elif self.round >= self.meta["chase"].get(side.value, 10 ** 9):
+                    self.winner = side                                 # he escaped until the deadline
         o = self.objective
         if o and self.winner is None:
             if o["type"] == "survive" and self.round >= o["rounds"]:
@@ -840,12 +979,14 @@ class GameState:
                     self.winner = Side.PLAYER
                 elif self.round > o["rounds"]:
                     self.winner = Side.AI
-            if self.winner:
-                self.emit("game_over", winner=self.winner.value)
+        if self.winner and not self.meta.get("over"):
+            self.meta["over"] = True
+            self.emit("game_over", winner=self.winner.value)
         return self.winner
 
     # ---- frontend snapshot ------------------------------------------------ #
     def snapshot(self, viewer: Side = Side.PLAYER) -> dict:
+        seen = self.visible_tiles(viewer); self.update_discovery(viewer, seen)
         f = self.factions[viewer]
         return {
             "round": self.round,
@@ -860,7 +1001,10 @@ class GameState:
                       if u.owner is viewer or (u.carrier is None and self.can_see(viewer, u.pos))],
             "buildings": [{"type": b.type.value, "owner": b.owner.value if b.owner else None,
                            "pos": b.pos, "turnsLeft": b.build_turns_left}
-                          for b in self.buildings.values()],
+                          for b in self.buildings.values()
+                          if b.owner is viewer or b.type not in (BuildingType.HQ, BuildingType.INFO_BASE) or b.pos in seen
+                          or (b.type is BuildingType.HQ and viewer.value in self.meta['found'])],   # enemy HQ is HIDDEN until found
+            "chase": {"you": self.meta["chase"].get(viewer.value), "enemy": self.meta["chase"].get(viewer.other.value)},
             # Fog of war for mines: only your own + ones you discovered.
             "mines": [{"pos": m.pos, "owner": m.owner.value}
                       for m in self.mines.values()
@@ -926,6 +1070,7 @@ def dump_state(s: GameState) -> dict:
                    "v": [x.value for x in m.revealed_to]} for m in s.mines.values()],
         "factions": {k.value: {"res": {r.value: x for r, x in f.res.items()},
                                "moral": f.moral, "cap": f.armory_cap} for k, f in s.factions.items()},
+        "meta": s.meta,
         "start_res": {k.value: {r.value: x for r, x in d.items()} for k, d in s.start_res.items()},
     }
 
@@ -954,4 +1099,5 @@ def load_state(d: dict) -> GameState:
         fs.res = {Res(r): x for r, x in f["res"].items()}
         fs.moral, fs.armory_cap = f["moral"], f["cap"]
     s.start_res = {Side(k): {Res(r): x for r, x in dd.items()} for k, dd in d["start_res"].items()}
+    s.meta = d.get("meta", s.meta)
     return s
